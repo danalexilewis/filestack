@@ -1,0 +1,12 @@
+{
+  "title": "User Profile Component Stack",
+  "files": [
+    "frontend/components/UserProfile.tsx",
+    "frontend/components/UserProfile.styles.ts",
+    "frontend/components/UserProfile.types.ts",
+    "backend/api/user/profile.ts",
+    "backend/services/userService.ts",
+    "backend/models/User.ts",
+    "shared/types/user.ts"
+  ]
+} 

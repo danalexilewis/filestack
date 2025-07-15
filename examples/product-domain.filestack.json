@@ -1,0 +1,11 @@
+{
+  "title": "Product Domain Stack",
+  "files": [
+    "src/dal/product/queries.ts",
+    "src/dal/product/mutations.ts",
+    "src/dal/product/api.ts",
+    "src/dal/product/contract.ts",
+    "src/dal/product/types.ts",
+    "src/dal/product/validation.ts"
+  ]
+} 
