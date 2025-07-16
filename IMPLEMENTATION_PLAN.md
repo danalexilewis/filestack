@@ -1,321 +1,53 @@
-# FileStack Implementation Plan
+# Implementation Plan: FileStack Prototype
 
-## Phase 1: Foundation Setup (Week 1) ✅ COMPLETE
+This document outlines the phased development plan for the FileStack Electron application.
 
-### 1.1 VS Code Development Environment
-- [x] Clone VS Code repository
-- [x] Install dependencies (`npm install`)
-- [x] Verify build process (`npm run compile`)
-- [x] Test development workflow (ready for `npm run watch`)
+---
 
-### 1.2 FileStack Directory Structure ✅ COMPLETE
-```
-src/vs/workbench/contrib/filestack/
-├── browser/                        # (ready for Phase 3)
-│   ├── filestackEditor.ts          # Main editor implementation
-│   ├── filestackEditorInput.ts     # Editor input handling
-│   ├── filestackEditorModel.ts     # Editor model and state
-│   └── filestackEditorWidget.ts    # UI widget for stacked view
-├── common/
-│   ├── filestackConfiguration.ts   ✅ JSON configuration parsing
-│   ├── filestackTypes.ts          ✅ TypeScript interfaces
-│   └── filestackConstants.ts      ✅ Constants and enums
-├── test/
-│   ├── browser/                   # (ready for Phase 3)
-│   │   └── filestackEditor.test.ts # Editor unit tests
-│   └── common/
-│       └── filestackConfiguration.test.ts ✅ Config parser tests
-└── filestack.contribution.ts      ✅ VS Code contribution points
-```
+### Phase 1: Project Initialization & Setup
 
-### 1.3 Core Types and Interfaces ✅ COMPLETE
-```typescript
-interface FilestackConfiguration {
-  title: string;
-  files: string[];
-}
+- [ ] **Initialize with `electron-forge`**: Use the `create-electron-app` command with the `vite-typescript` template to create a clean project structure.
+- [ ] **Add Core Dependencies**: Install `zod` for schema validation and `zustand` for state management.
+- [ ] **Confirm Dev Environment**: Run `npm start` to verify that the application launches and hot reloading is active.
 
-interface FilestackFile {
-  path: string;
-  content: string;
-  isDirty: boolean;
-  cursorPosition?: Position;
-  languageId?: string;
-}
+---
 
-interface FilestackEditorState {
-  configuration: FilestackConfiguration;
-  files: FilestackFile[];
-  activeFileIndex: number;
-  scrollPosition: number;
-}
+### Phase 2: Workspace & Configuration
 
-// Plus comprehensive error handling and enums
-```
+- [ ] **Workspace Loading**:
+    - [ ] Implement an "Open Workspace" menu item.
+    - [ ] Add a button on the welcome screen to trigger the workspace dialog.
+- [ ] **Configuration Parsing (Zod)**:
+    - [ ] Define a Zod schema for the `filestack.json` file in `src/shared/types.ts`.
+    - [ ] Implement a function in the main process to find, read, and validate the configuration file.
+    - [ ] Communicate the parsed views or any errors to the renderer process.
+- [ ] **UI - Sidebar**:
+    - [ ] Create a sidebar UI component.
+    - [ ] Display the list of views from the configuration.
 
-## Phase 2: Configuration Parser (Week 1-2) ✅ COMPLETE
+---
 
-### 2.1 JSON Configuration Parser
-- [x] Parse `.filestack.json` files
-- [x] Validate file paths (relative/absolute)
-- [x] Resolve file paths relative to workspace root
-- [x] Handle configuration errors gracefully
+### Phase 3: Editor & State Management
 
-### 2.2 File Path Resolution
-- [x] Support relative paths from workspace root
-- [x] Support relative paths from `.filestack.json` location
-- [x] Support absolute paths
-- [x] Validate file existence (structure validation)
+- [ ] **State Management (Zustand)**:
+    - [ ] Create a Zustand store to manage the active workspace path, the list of views, the active view, and file contents.
+- [ ] **Editor Integration (Monaco)**:
+    - [ ] Embed the Monaco Editor.
+    - [ ] Integrate `monaco-vim` for Vim keybindings.
+- [ ] **View Rendering**:
+    - [ ] When a view is selected, fetch its file contents and update the Zustand store.
+    - [ ] The Monaco Editor will react to store changes and display the content in a stacked format.
+- [ ] **File Operations**:
+    - [ ] Track file modifications (dirty state).
+    - [ ] Implement a "save" function to write changes back to the filesystem.
 
-### 2.3 Unit Tests
-- [x] Configuration parsing tests (15 test cases)
-- [x] File path resolution tests
-- [x] Error handling tests
+---
 
-## Phase 3: Editor Registration (Week 2) ✅ COMPLETE
+### Phase 4: `Org-Mode` Features
 
-### 3.1 VS Code Integration
-- [x] Register new editor type: `filestack.editor`
-- [x] Associate `.filestack.json` files with FileStack editor
-- [x] Create editor input and model classes
-- [x] Register contribution points
-
-### 3.2 Editor Input Implementation ✅ COMPLETE
-```typescript
-class FilestackEditorInput extends EditorInput {
-  private _configuration: FilestackConfiguration;
-  
-  // Override required methods
-  getTypeId(): string { return 'filestack.editor'; }
-  getName(): string { return this._configuration.title; }
-  // ... other required methods
-}
-```
-
-## Phase 4: Core Editor Implementation (Week 2-3) ✅ COMPLETE
-
-### 4.1 Editor Widget Structure
-- [x] Vertical container for stacked files
-- [x] Individual Monaco editor instances per file (placeholder implementation)
-- [x] File headers with name and save button
-- [x] Visual separators between files
-
-### 4.2 File Loading and Management
-- [x] Load all files synchronously on editor open
-- [x] Create Monaco editor instances for each file (placeholder)
-- [x] Handle file read errors gracefully
-- [x] Maintain file state (dirty, cursor position)
-
-### 4.3 Single Cursor Implementation
-- [x] Track single cursor position across all files
-- [x] Handle cursor movement between files
-- [x] Preserve cursor state during navigation
-- [x] Implement keyboard navigation (Page Up/Down, Cmd+Up/Down)
-
-## Phase 5: UI/UX Implementation (Week 3-4) ✅ COMPLETE
-
-### 5.1 File Headers
-- [x] Display file name in header
-- [x] Save button with dirty state indicator
-- [x] Visual styling consistent with VS Code
-
-### 5.2 Visual Separators
-- [x] Subtle separators between file sections
-- [x] Proper spacing and padding
-- [x] Responsive layout
-
-### 5.3 Save Functionality
-- [x] Individual file save buttons
-- [x] "Save All" command for entire stack
-- [x] Visual feedback for save operations
-- [x] Handle save errors
-
-## Phase 6: Keyboard Navigation (Week 4) ✅ COMPLETE
-
-### 6.1 Navigation Commands
-- [x] Page Up/Down to jump between files
-- [x] Cmd+Up/Down for file navigation (ready for implementation)
-- [ ] Home/End for file boundaries
-- [x] Maintain cursor position during navigation
-
-### 6.2 Command Registration
-```typescript
-// Register navigation commands
-registerAction2(class extends Action2 {
-  constructor() {
-    super({
-      id: 'filestack.navigateUp',
-      title: 'Navigate to Previous File',
-      keybinding: { primary: KeyCode.PageUp }
-    });
-  }
-});
-```
-
-## Phase 7: Testing and Integration (Week 4-5)
-
-### 7.1 Unit Tests
-- [ ] Configuration parser tests
-- [ ] File loading tests
-- [ ] Editor state management tests
-- [ ] Navigation logic tests
-
-### 7.2 Integration Tests
-- [ ] Sample `.filestack.json` files
-- [ ] End-to-end editor functionality
-- [ ] Keyboard navigation tests
-- [ ] Save functionality tests
-
-### 7.3 Manual Testing
-- [ ] Test with various file types
-- [ ] Test with large files
-- [ ] Test with missing files
-- [ ] Test with malformed configurations
-
-## Phase 8: Polish and Documentation (Week 5)
-
-### 8.1 Error Handling
-- [ ] Graceful handling of missing files
-- [ ] Configuration validation errors
-- [ ] File read/write errors
-- [ ] User-friendly error messages
-
-### 8.2 Performance Optimization
-- [ ] Efficient file loading
-- [ ] Memory management for large files
-- [ ] Smooth scrolling performance
-- [ ] Responsive UI updates
-
-### 8.3 Documentation
-- [ ] API documentation
-- [ ] User guide
-- [ ] Configuration examples
-- [ ] Troubleshooting guide
-
-## Technical Implementation Details
-
-### Monaco Editor Integration
-```typescript
-class FilestackEditorWidget {
-  private editors: ICodeEditor[] = [];
-  
-  private createEditor(file: FilestackFile): ICodeEditor {
-    return this.instantiationService.createInstance(CodeEditorWidget, 
-      this.domNode, 
-      {
-        value: file.content,
-        language: this.getLanguageFromPath(file.path),
-        readOnly: false,
-        // ... other options
-      }
-    );
-  }
-}
-```
-
-### State Management
-```typescript
-class FilestackEditorModel {
-  private _state: FilestackEditorState;
-  
-  public updateCursorPosition(position: Position, fileIndex: number): void {
-    this._state.activeFileIndex = fileIndex;
-    this._state.files[fileIndex].cursorPosition = position;
-    this._onDidChangeState.fire(this._state);
-  }
-}
-```
-
-### File Path Resolution
-```typescript
-class FilestackConfigurationService {
-  public resolveFilePath(path: string, basePath: string): string {
-    if (path.startsWith('/')) {
-      return path; // Absolute path
-    }
-    
-    if (path.startsWith('./') || path.startsWith('../')) {
-      return path.resolve(basePath, path); // Relative to .filestack.json
-    }
-    
-    return path.resolve(this.workspaceRoot, path); // Relative to workspace
-  }
-}
-```
-
-## Success Criteria
-
-### MVP Features
-- [ ] Open `.filestack.json` files in FileStack editor
-- [ ] Display multiple files in vertical stack
-- [ ] Full editing capabilities for each file
-- [ ] Single cursor navigation
-- [ ] Keyboard navigation between files
-- [ ] Individual and bulk save functionality
-- [ ] Visual file headers with save buttons
-
-### Quality Gates
-- [ ] All unit tests passing
-- [ ] Integration tests passing
-- [ ] No regressions to existing VS Code functionality
-- [ ] Performance acceptable for files up to 10MB
-- [ ] Error handling covers all edge cases
-- [ ] Documentation complete and accurate
-
-## Risk Mitigation
-
-### Technical Risks
-1. **Monaco Editor Integration**: Complex integration with multiple editor instances
-   - Mitigation: Start with simple integration, iterate on complexity
-   
-2. **Performance with Large Files**: Multiple large files may impact performance
-   - Mitigation: Implement lazy loading and virtual scrolling if needed
-   
-3. **VS Code API Changes**: Future VS Code updates may break compatibility
-   - Mitigation: Minimize dependencies on internal APIs, use stable interfaces
-
-### Timeline Risks
-1. **Scope Creep**: Adding features beyond MVP
-   - Mitigation: Strict adherence to MVP checklist, defer enhancements
-   
-2. **Testing Complexity**: Comprehensive testing may take longer than expected
-   - Mitigation: Write tests alongside implementation, not after
-
-## 🎯 Current Status Summary
-
-### ✅ Completed (Phases 1-2)
-- **VS Code Development Environment**: Fully set up with Node.js v22, dependencies installed, build verified
-- **FileStack Directory Structure**: Complete directory structure following VS Code conventions
-- **Configuration Parser**: Robust JSON parser with full validation and error handling
-- **File Path Resolution**: Support for absolute, relative, and workspace-relative paths
-- **Type System**: Comprehensive TypeScript interfaces and error types
-- **Unit Tests**: 15 test cases covering all configuration scenarios
-- **Editor Registration**: Basic editor type registration with VS Code
-
-### 🚧 In Progress (Phase 3)
-- **Editor Input/Model Classes**: Ready to implement
-- **Monaco Editor Integration**: Next major milestone
-
-### 📋 Next Steps
-
-1. ✅ Complete VS Code clone and setup
-2. ✅ Create FileStack directory structure  
-3. ✅ Implement configuration parser with tests
-4. ✅ Register FileStack editor type
-5. 🚧 **Build basic editor widget with file loading** (Phase 3)
-6. 🚧 **Add UI components (headers, separators)** (Phase 4)
-7. 🚧 **Implement navigation and save functionality** (Phase 5-6)
-8. 🚧 **Comprehensive testing and documentation** (Phase 7-8)
-
-### 🎯 Immediate Next Steps
-1. ✅ **Implement Editor Input Class** - Handle `.filestack.json` file opening
-2. ✅ **Create Editor Model** - Manage file loading and state
-3. ✅ **Build Editor Widget** - Vertical stack layout with Monaco editors
-4. ✅ **Add File Headers** - Display file names with save buttons
-
-### 🚧 Next Phase (Phase 7-8)
-1. **Integration Testing** - Test with real VS Code environment
-2. **File System Integration** - Replace placeholder file loading with real I/O
-3. **Monaco Editor Integration** - Replace contentEditable with proper Monaco editors
-4. **Command Registration** - Register navigation commands with VS Code
-5. **Error Handling** - Comprehensive error handling and user feedback 
+- [ ] **Content Folding**:
+    - [ ] Implement controls to collapse and expand each file section in the editor.
+- [ ] **Keyboard Navigation**:
+    - [ ] Create keybindings to navigate between file sections.
+- [ ] **Task Highlighting**:
+    - [ ] Add syntax-based highlighting for `TODO` and `DONE` keywords. 

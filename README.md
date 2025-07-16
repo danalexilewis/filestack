@@ -1,132 +1,49 @@
-# FileStack
+# FileStack - An `org-mode` Inspired Prototype
 
-A custom VS Code fork that introduces a new editor mode designed for domain-driven workflows.
+FileStack is a standalone desktop application built with Electron to prototype a novel, domain-driven workflow inspired by Emacs' `org-mode`. The goal is to create a functional proof-of-concept demonstrating a "stacked" file view, where multiple files can be managed as a single, cohesive unit.
 
-## Overview
+This project serves as a living specification for a potential future VS Code extension.
 
-FileStack enables a single scrollable view where multiple related source files (e.g. queries, mutations, API, contracts) are stacked vertically, each with full editing capabilities and all native VS Code features intact (IntelliSense, Git, extensions, etc.).
+---
 
-## Features
+## Key Features
 
-- **Stacked File View**: Multiple files rendered in a single vertical scrollable layout
-- **Full VS Code Integration**: Preserves all native features (IntelliSense, Git, extensions, LSP, etc.)
-- **Domain-Driven Workflows**: Organize related files by domain using `.filestack.json` configuration
-- **Single Cursor Navigation**: Unified cursor experience across all stacked files
-- **Keyboard Navigation**: Page Up/Down and Cmd+Up/Down to jump between files
-- **Save All**: Single command to save all files in the stack
+- **Stacked File Views**: Define sets of related files in a `filestack.json` configuration. Each set, or "view," is rendered as a single, scrollable document in the editor.
+- **Vim Keybindings**: The editor provides Vim keybindings for efficient, keyboard-driven navigation and editing.
+- **Workspace-Aware**: Open any directory as a workspace, and FileStack will automatically detect and load its configuration.
+- **Content Folding**: Collapse and expand individual file sections within a view to focus on the task at hand.
+- **Modern Tooling**: Built with TypeScript, Vite for hot-reloading, and Zod for robust configuration validation.
 
-## Configuration Format
-
-Create a `.filestack.json` file to define which files to stack:
-
-```json
-{
-  "title": "User Domain Stack",
-  "files": [
-    "dal/user/queries.ts",
-    "dal/user/mutations.ts", 
-    "dal/user/api.ts",
-    "dal/user/contract.ts"
-  ]
-}
-```
-
-### File Path Resolution
-
-File paths in `.filestack.json` support both:
-- **Relative to workspace root**: `"dal/user/queries.ts"`
-- **Relative to .filestack.json location**: `"./queries.ts"`
-- **Absolute paths**: `"/absolute/path/file.ts"`
-
-## Development Setup
-
-### Prerequisites
-
-- Node.js 18+ 
-- Git
-- Python 3.8+ (for VS Code build tools)
-- C++ build tools (for native dependencies)
-
-### Getting Started
-
-1. **Clone VS Code** (if not already done):
-   ```bash
-   git clone https://github.com/microsoft/vscode.git
-   cd vscode
-   ```
-
-2. **Install dependencies**:
-   ```bash
-   npm install
-   ```
-
-3. **Build VS Code**:
-   ```bash
-   npm run build
-   ```
-
-4. **Run in development mode**:
-   ```bash
-   npm run watch
-   ```
-
-### FileStack Implementation
-
-The FileStack feature is implemented in:
-```
-src/vs/workbench/contrib/filestack/
-```
-
-Key components:
-- `filestackEditor.ts` - Main editor implementation
-- `filestackEditorInput.ts` - Editor input handling
-- `filestackConfiguration.ts` - JSON configuration parsing
-- `filestackEditorModel.ts` - Editor model and state management
+---
 
 ## Architecture
 
-### Core Principles
+- **Electron**: Provides the cross-platform application shell.
+- **TypeScript**: Ensures the entire codebase is type-safe and maintainable.
+- **Vite**: Powers the development environment with a fast build process and hot module replacement (HMR).
+- **Zod**: Used in the main process to parse and validate the `filestack.json` configuration, ensuring data integrity and providing clear error messages.
+- **Zustand**: A minimal, fast state management library used in the renderer process to manage UI state, such as the active workspace, the list of views, and the content of the editor.
 
-1. **Minimal Changes**: All FileStack code is isolated in `src/vs/workbench/contrib/filestack/`
-2. **VS Code Compatibility**: Preserves all existing VS Code features and extension APIs
-3. **Single Cursor**: One unified cursor across all stacked files
-4. **Explicit Save**: Changes require explicit saving with visual indicators
+---
 
-### Technical Constraints
+## Getting Started (Development)
 
-- Do not modify core editor layout
-- Do not modify extension APIs  
-- Do not modify document model
-- Preserve compatibility with extensions, Git, LSP, and AI features
+To get the application running locally:
 
-## Testing
+1.  **Clone the repository:**
+    ```bash
+    git clone <repository-url>
+    cd filestack
+    ```
 
-### Unit Tests
-- JSON configuration parser
-- File loading and validation
-- Editor state management
+2.  **Install dependencies:**
+    ```bash
+    npm install
+    ```
 
-### Integration Tests
-- Sample `.filestack.json` files
-- End-to-end editor functionality
-- Keyboard navigation
+3.  **Run the development server:**
+    ```bash
+    npm start
+    ```
 
-## Future Enhancements
-
-- Sidebar navigation between sections
-- Collapsible file blocks
-- `.filestack.md` for annotations
-- `.filestack.js` for dynamic views
-- Cross-file search functionality
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make minimal changes in the `filestack` directory
-4. Add tests for new functionality
-5. Submit a pull request
-
-## License
-
-This project is based on VS Code and follows the same licensing terms. 
+This will launch the application in development mode with hot reloading enabled. Any changes made to the source code will be reflected instantly. 
