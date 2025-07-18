@@ -1,23 +1,136 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useStore } from './store';
 import * as monaco from 'monaco-editor';
-import { useEditor, EditorContent } from '@tiptap/react';
+import { useEditor, EditorContent, NodeViewWrapper, NodeViewProps, ReactNodeViewRenderer } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import CodeBlock from '@tiptap/extension-code-block';
 import Placeholder from '@tiptap/extension-placeholder';
+import { Node, mergeAttributes } from '@tiptap/core';
 
-interface MonacoBlock {
-  id: string;
-  file: string;
-  language: string;
-  content: string;
-}
+// Simple Monaco Block React Component
+const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node }) => {
+  const { fileContents, setFileContents, markFileAsDirty } = useStore();
+  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  
+  const file = node.attrs.file;
+  const language = node.attrs.language;
+  
+  useEffect(() => {
+    if (!containerRef.current || !file || !language) return;
+
+    console.log('Creating Monaco editor for:', file);
+    
+    // Create Monaco editor
+    const monacoEditor = monaco.editor.create(containerRef.current, {
+      value: fileContents[file] || '',
+      language: language,
+      theme: 'vs-dark',
+      minimap: { enabled: false },
+      scrollBeyondLastLine: false,
+      automaticLayout: true,
+      scrollbar: {
+        vertical: 'hidden',
+      },
+      overviewRulerLanes: 0,
+      readOnly: false,
+      wordWrap: 'on',
+      lineNumbers: 'on',
+      folding: true,
+      lineDecorationsWidth: 10,
+      lineNumbersMinChars: 3,
+    });
+
+    // Track changes and update store
+    const changeDisposable = monacoEditor.onDidChangeModelContent(() => {
+      const newValue = monacoEditor.getValue();
+      setFileContents(file, newValue);
+      markFileAsDirty(file);
+    });
+
+    editorRef.current = monacoEditor;
+
+    return () => {
+      changeDisposable.dispose();
+      monacoEditor.dispose();
+    };
+  }, [file, language, fileContents, setFileContents, markFileAsDirty]);
+
+  if (!file || !language) {
+    return <NodeViewWrapper>Invalid Monaco block</NodeViewWrapper>;
+  }
+
+  return (
+    <NodeViewWrapper>
+      <div style={{
+        minHeight: '200px',
+        width: '100%',
+        border: '2px solid #007acc',
+        marginTop: '10px',
+        marginBottom: '10px',
+        borderRadius: '4px',
+        overflow: 'hidden',
+        background: '#1e1e1e'
+      }}>
+        <div style={{
+          padding: '8px 12px',
+          background: '#f5f5f5',
+          borderBottom: '1px solid #ccc',
+          fontSize: '14px',
+          fontWeight: 'bold',
+          color: '#333'
+        }}>
+          {file} ({language})
+        </div>
+        <div 
+          ref={containerRef}
+          style={{
+            minHeight: '200px',
+            width: '100%'
+          }}
+        />
+      </div>
+    </NodeViewWrapper>
+  );
+};
+
+// Simple Monaco Block Extension
+const MonacoBlock = Node.create({
+  name: 'monacoBlock',
+  group: 'block',
+  atom: true,
+  
+  addAttributes() {
+    return {
+      file: {
+        default: null,
+      },
+      language: {
+        default: null,
+      },
+    }
+  },
+
+  parseHTML() {
+    return [
+      {
+        tag: 'div[data-monaco-block]',
+      },
+    ]
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ['div', mergeAttributes(HTMLAttributes, { 'data-monaco-block': 'true' })]
+  },
+
+  addNodeView() {
+    return ReactNodeViewRenderer(MonacoBlockComponent);
+  },
+});
 
 const Editor = () => {
   const { activeView, views, fileContents, setFileContents, markFileAsDirty } = useStore();
-  const editorRefs = useRef<Record<string, monaco.editor.IStandaloneCodeEditor>>({});
   const currentViewRef = useRef<string | null>(null);
-  const [monacoBlocks, setMonacoBlocks] = useState<MonacoBlock[]>([]);
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [slashPosition, setSlashPosition] = useState({ x: 0, y: 0 });
   const slashMenuRef = useRef<HTMLDivElement>(null);
@@ -72,16 +185,6 @@ const Editor = () => {
     }
   };
 
-  // Function to update editor height
-  const updateEditorHeight = (editor: monaco.editor.IStandaloneCodeEditor, container: HTMLElement) => {
-    const contentHeight = editor.getContentHeight();
-    const minHeight = 200;
-    const maxHeight = 800;
-    const height = Math.max(minHeight, Math.min(maxHeight, contentHeight));
-    container.style.height = `${height}px`;
-    editor.layout();
-  };
-
   // Configure Monaco for test files
   const configureMonacoForTestFiles = () => {
     monaco.languages.typescript.typescriptDefaults.addExtraLib(`
@@ -115,20 +218,20 @@ const Editor = () => {
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
-        codeBlock: false, // Disable default code block
+        codeBlock: false,
       }),
       CodeBlock.configure({
         HTMLAttributes: {
           class: 'monaco-code-block',
         },
       }),
+      MonacoBlock,
       Placeholder.configure({
         placeholder: 'Type / to see commands...',
       }),
     ],
     content: '',
     onUpdate: ({ editor }) => {
-      // Handle content updates
       const content = editor.getHTML();
       console.log('Content updated:', content);
     },
@@ -144,29 +247,19 @@ const Editor = () => {
     if (currentView && currentView.title !== currentViewRef.current) {
       currentViewRef.current = currentView.title;
       
-      // Create initial content
-      const blocks: MonacoBlock[] = [];
+      // Create initial content using HTML
       let htmlContent = `<h1>${currentView.title}</h1>`;
       htmlContent += `<p>This view contains ${currentView.files.length} files related to ${currentView.title.toLowerCase()}.</p>`;
       
       // Add Monaco blocks for each file
       currentView.files.forEach((file) => {
-        const blockId = `monaco-${file.replace(/[^a-zA-Z0-9]/g, '-')}`;
         htmlContent += `<div data-monaco-block="true" data-file="${file}" data-language="${getLanguageFromFile(file)}"></div>`;
-        
-        blocks.push({
-          id: blockId,
-          file: file,
-          language: getLanguageFromFile(file),
-          content: fileContents[file] || ''
-        });
       });
       
       if (editor) {
         editor.commands.setContent(htmlContent);
         console.log('Set content:', htmlContent);
       }
-      setMonacoBlocks(blocks);
     }
   }, [currentView, fileContents, editor]);
 
@@ -228,129 +321,19 @@ const Editor = () => {
       case 'monaco':
         if (currentView?.files.length) {
           const file = currentView.files[0];
-          const monacoHtml = `<div data-monaco-block="true" data-file="${file}" data-language="${getLanguageFromFile(file)}"></div>`;
-          editor.chain().focus().insertContent(monacoHtml).run();
           
-          const newBlock: MonacoBlock = {
-            id: `monaco-${file.replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}`,
-            file: file,
-            language: getLanguageFromFile(file),
-            content: fileContents[file] || ''
-          };
-          setMonacoBlocks(prev => [...prev, newBlock]);
+          // Insert Monaco block node
+          editor.chain().focus().insertContent({
+            type: 'monacoBlock',
+            attrs: {
+              file: file,
+              language: getLanguageFromFile(file),
+            },
+          }).run();
         }
         break;
     }
   };
-
-  // Render Monaco blocks
-  useEffect(() => {
-    if (!editor) return;
-
-    console.log('Rendering Monaco blocks, count:', monacoBlocks.length);
-    
-    const renderMonacoBlocks = () => {
-      const monacoElements = document.querySelectorAll('[data-monaco-block]');
-      console.log('Found Monaco elements:', monacoElements.length);
-      
-      monacoElements.forEach((element, index) => {
-        const file = element.getAttribute('data-file');
-        const language = element.getAttribute('data-language');
-        
-        console.log(`Element ${index}:`, { file, language });
-        
-        if (file && language) {
-          const block = monacoBlocks.find(b => b.file === file);
-          if (block) {
-            const containerId = `editor-${block.id}`;
-            const container = document.getElementById(containerId);
-            
-            if (!container) {
-              console.log('Creating Monaco editor for:', file);
-              
-              // Create the Monaco editor container
-              const editorContainer = document.createElement('div');
-              editorContainer.id = containerId;
-              editorContainer.style.minHeight = '200px';
-              editorContainer.style.width = '100%';
-              editorContainer.style.border = '2px solid #007acc';
-              editorContainer.style.marginTop = '10px';
-              editorContainer.style.marginBottom = '10px';
-              editorContainer.style.borderRadius = '4px';
-              editorContainer.style.overflow = 'hidden';
-              editorContainer.style.background = '#1e1e1e';
-              
-              // Add header
-              const header = document.createElement('div');
-              header.style.padding = '8px 12px';
-              header.style.background = '#f5f5f5';
-              header.style.borderBottom = '1px solid #ccc';
-              header.style.fontSize = '14px';
-              header.style.fontWeight = 'bold';
-              header.style.color = '#333';
-              header.textContent = `${file} (${language})`;
-              editorContainer.appendChild(header);
-              
-              // Add editor div
-              const editorDiv = document.createElement('div');
-              editorDiv.style.minHeight = '200px';
-              editorDiv.style.width = '100%';
-              editorContainer.appendChild(editorDiv);
-              
-              element.appendChild(editorContainer);
-              
-              // Create Monaco editor
-              const monacoEditor = monaco.editor.create(editorDiv, {
-                value: block.content,
-                language: block.language,
-                theme: 'vs-dark',
-                minimap: { enabled: false },
-                scrollBeyondLastLine: false,
-                automaticLayout: true,
-                scrollbar: {
-                  vertical: 'hidden',
-                },
-                overviewRulerLanes: 0,
-                readOnly: false,
-                wordWrap: 'on',
-                lineNumbers: 'on',
-                folding: true,
-                lineDecorationsWidth: 10,
-                lineNumbersMinChars: 3,
-              });
-
-              console.log('Monaco editor created for:', file);
-
-              // Set initial height
-              updateEditorHeight(monacoEditor, editorDiv);
-
-              // Update height when content changes
-              const disposable = monacoEditor.onDidContentSizeChange(() => {
-                updateEditorHeight(monacoEditor, editorDiv);
-              });
-
-              // Track changes and update store
-              const changeDisposable = monacoEditor.onDidChangeModelContent(() => {
-                const newValue = monacoEditor.getValue();
-                if (newValue !== block.content) {
-                  setMonacoBlocks(prev => prev.map(b => 
-                    b.id === block.id ? { ...b, content: newValue } : b
-                  ));
-                  setFileContents(block.file, newValue);
-                  markFileAsDirty(block.file);
-                }
-              });
-
-              editorRefs.current[block.id] = monacoEditor;
-            }
-          }
-        }
-      });
-    };
-
-    // Render after content is set
-    setTimeout(renderMonacoBlocks, 200);
-  }, [editor, monacoBlocks, setFileContents, markFileAsDirty]);
 
   if (!activeView || !currentView) {
     return (
