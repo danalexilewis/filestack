@@ -15,6 +15,7 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node }) => {
   
   const file = node.attrs.file;
   const language = node.attrs.language;
+  const title = node.attrs.title;
   
   useEffect(() => {
     if (!containerRef.current || !file || !language) return;
@@ -25,10 +26,15 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node }) => {
     const timeoutId = setTimeout(() => {
       if (!containerRef.current) return;
       
-      // Create Monaco editor
+      // Create Monaco editor with unique model
+      const model = monaco.editor.createModel(
+        fileContents[file] || '',
+        language,
+        monaco.Uri.parse(`inmemory://${file}`)
+      );
+      
       const monacoEditor = monaco.editor.create(containerRef.current, {
-        value: fileContents[file] || '',
-        language: language,
+        model: model,
         theme: 'vs-dark',
         minimap: { enabled: false },
         scrollBeyondLastLine: false,
@@ -40,7 +46,7 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node }) => {
         readOnly: false,
         wordWrap: 'on',
         lineNumbers: 'on',
-        folding: true,
+        folding: false,
         lineDecorationsWidth: 10,
         lineNumbersMinChars: 3,
       });
@@ -57,6 +63,7 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node }) => {
       return () => {
         changeDisposable.dispose();
         monacoEditor.dispose();
+        model.dispose();
       };
     }, 0);
 
@@ -71,6 +78,8 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node }) => {
   if (!file || !language) {
     return <NodeViewWrapper>Invalid Monaco block</NodeViewWrapper>;
   }
+
+  const displayTitle = title || `${file} (${language})`;
 
   return (
     <NodeViewWrapper>
@@ -92,7 +101,7 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node }) => {
           fontWeight: 'bold',
           color: '#333'
         }}>
-          {file} ({language})
+          {displayTitle}
         </div>
         <div 
           ref={containerRef}
@@ -118,6 +127,9 @@ const MonacoBlock = Node.create({
         default: null,
       },
       language: {
+        default: null,
+      },
+      title: {
         default: null,
       },
     }
@@ -259,8 +271,64 @@ const Editor = () => {
     if (currentView && currentView.title !== currentViewRef.current) {
       currentViewRef.current = currentView.title;
       
-      if (editor) {
-        // Clear the editor first
+      console.log('Current view:', currentView);
+      console.log('Has content:', !!currentView.content);
+      console.log('Content length:', currentView.content?.length);
+      
+      if (editor && currentView.content) {
+        console.log('Rendering content from JSON file');
+        
+        // Build content array for TipTap
+        const contentArray: any[] = [];
+        
+        currentView.content.forEach((item, index) => {
+          console.log(`Processing item ${index}:`, item);
+          switch (item.type) {
+            case 'heading':
+              console.log(`Adding heading: h${item.level} - ${item.text}`);
+              contentArray.push({
+                type: 'heading',
+                attrs: { level: item.level },
+                content: [{ type: 'text', text: item.text }]
+              });
+              break;
+            case 'paragraph':
+              console.log(`Adding paragraph: ${item.text}`);
+              contentArray.push({
+                type: 'paragraph',
+                content: [{ type: 'text', text: item.text }]
+              });
+              break;
+            case 'monaco':
+              console.log(`Adding Monaco block: ${item.title} - ${item.file} (${item.language})`);
+              contentArray.push({
+                type: 'monacoBlock',
+                attrs: {
+                  file: item.file,
+                  language: item.language,
+                  title: item.title,
+                }
+              });
+              break;
+            case 'list': {
+              console.log(`Adding list with ${item.items.length} items`);
+              contentArray.push({
+                type: 'bulletList',
+                content: item.items.map(item => ({
+                  type: 'listItem',
+                  content: [{ type: 'text', text: item }]
+                }))
+              });
+              break;
+            }
+          }
+        });
+        
+        // Insert all content at once
+        editor.commands.setContent(contentArray);
+        console.log('Set content array:', contentArray);
+      } else if (editor) {
+        // Fallback to old behavior if no content is defined
         editor.commands.clearContent();
         
         // Insert the heading
@@ -276,11 +344,12 @@ const Editor = () => {
             attrs: {
               file: file,
               language: getLanguageFromFile(file),
+              title: `${file} Editor`,
             },
           }).run();
         });
         
-        console.log('Inserted Monaco blocks for files:', currentView.files);
+        console.log('Inserted fallback content for files:', currentView.files);
       }
     }
   }, [currentView, fileContents, editor]);
@@ -350,6 +419,7 @@ const Editor = () => {
             attrs: {
               file: file,
               language: getLanguageFromFile(file),
+              title: `${file} Editor`,
             },
           }).run();
         }

@@ -18,11 +18,19 @@ const App: React.FC = () => {
 
   useEffect(() => {
     window.electron.onConfigLoaded((loadedViews: any[]) => {
+      console.log('Config loaded:', loadedViews);
+      console.log('First view content:', loadedViews[0]?.content);
+      console.log('First view files:', loadedViews[0]?.files);
+      console.log('All views:', JSON.stringify(loadedViews, null, 2));
       setViews(loadedViews);
     });
     // This is a new event that I will add to the preload script
     window.electron.onWorkspaceOpened((path: string) => {
       setWorkspacePath(path);
+    });
+    
+    window.electron.onConfigError((errorMessage: string) => {
+      console.error('Config error:', errorMessage);
     });
   }, [setViews, setWorkspacePath]);
 
