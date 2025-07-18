@@ -10,6 +10,7 @@ const App: React.FC = () => {
     dirtyFiles,
     activeView,
     fileContents,
+    setFileContents,
     unmarkFileAsDirty,
     workspacePath,
     setWorkspacePath,
@@ -24,6 +25,20 @@ const App: React.FC = () => {
       setWorkspacePath(path);
     });
   }, [setViews, setWorkspacePath]);
+
+  // Load file contents when active view changes
+  useEffect(() => {
+    if (activeView && workspacePath) {
+      const currentView = views.find(view => view.title === activeView);
+      if (currentView) {
+        window.electron.getWorkspaceFileContents(currentView.files).then((contents) => {
+          Object.entries(contents).forEach(([file, content]) => {
+            setFileContents(file, content);
+          });
+        });
+      }
+    }
+  }, [activeView, workspacePath, views, setFileContents]);
 
   const handleSave = () => {
     const filesToSave: Record<string, string> = {};

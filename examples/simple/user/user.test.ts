@@ -2,7 +2,7 @@ import { getUser } from './user';
 
 describe('getUser', () => {
   it('should return a user for a valid id', () => {
-    const user = getUser('1');
+    const user = getUser('test');
     expect(user).not.toBeNull();
     expect(user?.name).toBe('Test User');
   });

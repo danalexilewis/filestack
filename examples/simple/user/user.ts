@@ -3,6 +3,7 @@ export interface User {
   name: string;
   email: string;
 }
+hello
 
 export function getUser(id: string): User | null {
   // In a real application, you would fetch this from a database
