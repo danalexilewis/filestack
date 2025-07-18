@@ -21,38 +21,50 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node }) => {
 
     console.log('Creating Monaco editor for:', file);
     
-    // Create Monaco editor
-    const monacoEditor = monaco.editor.create(containerRef.current, {
-      value: fileContents[file] || '',
-      language: language,
-      theme: 'vs-dark',
-      minimap: { enabled: false },
-      scrollBeyondLastLine: false,
-      automaticLayout: true,
-      scrollbar: {
-        vertical: 'hidden',
-      },
-      overviewRulerLanes: 0,
-      readOnly: false,
-      wordWrap: 'on',
-      lineNumbers: 'on',
-      folding: true,
-      lineDecorationsWidth: 10,
-      lineNumbersMinChars: 3,
-    });
+    // Use setTimeout to avoid React lifecycle issues
+    const timeoutId = setTimeout(() => {
+      if (!containerRef.current) return;
+      
+      // Create Monaco editor
+      const monacoEditor = monaco.editor.create(containerRef.current, {
+        value: fileContents[file] || '',
+        language: language,
+        theme: 'vs-dark',
+        minimap: { enabled: false },
+        scrollBeyondLastLine: false,
+        automaticLayout: true,
+        scrollbar: {
+          vertical: 'hidden',
+        },
+        overviewRulerLanes: 0,
+        readOnly: false,
+        wordWrap: 'on',
+        lineNumbers: 'on',
+        folding: true,
+        lineDecorationsWidth: 10,
+        lineNumbersMinChars: 3,
+      });
 
-    // Track changes and update store
-    const changeDisposable = monacoEditor.onDidChangeModelContent(() => {
-      const newValue = monacoEditor.getValue();
-      setFileContents(file, newValue);
-      markFileAsDirty(file);
-    });
+      // Track changes and update store
+      const changeDisposable = monacoEditor.onDidChangeModelContent(() => {
+        const newValue = monacoEditor.getValue();
+        setFileContents(file, newValue);
+        markFileAsDirty(file);
+      });
 
-    editorRef.current = monacoEditor;
+      editorRef.current = monacoEditor;
+
+      return () => {
+        changeDisposable.dispose();
+        monacoEditor.dispose();
+      };
+    }, 0);
 
     return () => {
-      changeDisposable.dispose();
-      monacoEditor.dispose();
+      clearTimeout(timeoutId);
+      if (editorRef.current) {
+        editorRef.current.dispose();
+      }
     };
   }, [file, language, fileContents, setFileContents, markFileAsDirty]);
 
@@ -247,18 +259,28 @@ const Editor = () => {
     if (currentView && currentView.title !== currentViewRef.current) {
       currentViewRef.current = currentView.title;
       
-      // Create initial content using HTML
-      let htmlContent = `<h1>${currentView.title}</h1>`;
-      htmlContent += `<p>This view contains ${currentView.files.length} files related to ${currentView.title.toLowerCase()}.</p>`;
-      
-      // Add Monaco blocks for each file
-      currentView.files.forEach((file) => {
-        htmlContent += `<div data-monaco-block="true" data-file="${file}" data-language="${getLanguageFromFile(file)}"></div>`;
-      });
-      
       if (editor) {
-        editor.commands.setContent(htmlContent);
-        console.log('Set content:', htmlContent);
+        // Clear the editor first
+        editor.commands.clearContent();
+        
+        // Insert the heading
+        editor.chain().focus().insertContent(`<h1>${currentView.title}</h1>`).run();
+        
+        // Insert the description
+        editor.chain().focus().insertContent(`<p>This view contains ${currentView.files.length} files related to ${currentView.title.toLowerCase()}.</p>`).run();
+        
+        // Insert Monaco blocks for each file
+        currentView.files.forEach((file) => {
+          editor.chain().focus().insertContent({
+            type: 'monacoBlock',
+            attrs: {
+              file: file,
+              language: getLanguageFromFile(file),
+            },
+          }).run();
+        });
+        
+        console.log('Inserted Monaco blocks for files:', currentView.files);
       }
     }
   }, [currentView, fileContents, editor]);
