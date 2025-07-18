@@ -45,7 +45,7 @@ const App: React.FC = () => {
   }
 
   return (
-    <div style={{ display: 'flex', height: '100vh' }}>
+    <div style={{ display: 'flex', width: '100vw' }}>
       <div style={{ width: '200px', borderRight: '1px solid #ccc' }}>
         <h2>Views</h2>
         <button onClick={handleSave} disabled={dirtyFiles.length === 0}>
@@ -69,7 +69,7 @@ const App: React.FC = () => {
           ))}
         </ul>
       </div>
-      <div style={{ flex: 1 }}>
+      <div style={{ flex: 1, width: 'calc(100vw - 200px)' }}>
         <Editor />
       </div>
     </div>
