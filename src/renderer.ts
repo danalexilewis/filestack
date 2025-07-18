@@ -33,3 +33,24 @@ console.log('👋 This message is being logged by "renderer.ts", included via Vi
 document.getElementById('open-workspace')?.addEventListener('click', () => {
   window.electron.openWorkspace();
 });
+
+window.electron.onConfigLoaded((views: { name: string }[]) => {
+  const contentDiv = document.getElementById('content');
+  if (contentDiv) {
+    contentDiv.innerHTML = '<h2>Views</h2>';
+    const ul = document.createElement('ul');
+    views.forEach(view => {
+      const li = document.createElement('li');
+      li.textContent = view.name;
+      ul.appendChild(li);
+    });
+    contentDiv.appendChild(ul);
+  }
+});
+
+window.electron.onConfigError((errorMessage: string) => {
+  const contentDiv = document.getElementById('content');
+  if (contentDiv) {
+    contentDiv.innerHTML = `<p style="color: red;">${errorMessage}</p>`;
+  }
+});

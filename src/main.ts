@@ -32,6 +32,18 @@ const menuTemplate: (Electron.MenuItemConstructorOptions | Electron.MenuItem)[] 
       { type: 'separator' },
       { role: 'quit' }
     ]
+  },
+  {
+    label: 'Edit',
+    submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' }
+    ]
   }
 ];
 

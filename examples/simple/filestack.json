@@ -1,0 +1,18 @@
+{
+  "views": [
+    {
+      "title": "User Domain",
+      "files": [
+        "user/user.ts",
+        "user/user.test.ts"
+      ]
+    },
+    {
+      "title": "Product Domain",
+      "files": [
+        "product/product.ts",
+        "product/product.test.ts"
+      ]
+    }
+  ]
+} 

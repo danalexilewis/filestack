@@ -6,24 +6,24 @@ This document outlines the phased development plan for the FileStack Electron ap
 
 ### Phase 1: Project Initialization & Setup
 
-- [ ] **Initialize with `electron-forge`**: Use the `create-electron-app` command with the `vite-typescript` template to create a clean project structure.
-- [ ] **Add Core Dependencies**: Install `zod` for schema validation and `zustand` for state management.
-- [ ] **Confirm Dev Environment**: Run `npm start` to verify that the application launches and hot reloading is active.
+- [x] **Initialize with `electron-forge`**: Use the `create-electron-app` command with the `vite-typescript` template to create a clean project structure.
+- [x] **Add Core Dependencies**: Install `zod` for schema validation and `zustand` for state management.
+- [x] **Confirm Dev Environment**: Run `npm start` to verify that the application launches and hot reloading is active.
 
 ---
 
 ### Phase 2: Workspace & Configuration
 
-- [ ] **Workspace Loading**:
-    - [ ] Implement an "Open Workspace" menu item.
-    - [ ] Add a button on the welcome screen to trigger the workspace dialog.
-- [ ] **Configuration Parsing (Zod)**:
-    - [ ] Define a Zod schema for the `filestack.json` file in `src/shared/types.ts`.
-    - [ ] Implement a function in the main process to find, read, and validate the configuration file.
-    - [ ] Communicate the parsed views or any errors to the renderer process.
-- [ ] **UI - Sidebar**:
-    - [ ] Create a sidebar UI component.
-    - [ ] Display the list of views from the configuration.
+- [x] **Workspace Loading**:
+    - [x] Implement an "Open Workspace" menu item.
+    - [x] Add a button on the welcome screen to trigger the workspace dialog.
+- [x] **Configuration Parsing (Zod)**:
+    - [x] Define a Zod schema for the `filestack.json` file in `src/shared/types.ts`.
+    - [x] Implement a function in the main process to find, read, and validate the configuration file.
+    - [x] Communicate the parsed views or any errors to the renderer process.
+- [x] **UI - Sidebar**:
+    - [x] Create a sidebar UI component.
+    - [x] Display the list of views from the configuration.
 
 ---
 
