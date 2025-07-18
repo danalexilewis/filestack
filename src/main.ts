@@ -9,6 +9,8 @@ import { ConfigSchema } from './shared/types';
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string;
 declare const MAIN_WINDOW_VITE_NAME: string;
 
+let workspacePath: string | null = null;
+
 const menuTemplate: (Electron.MenuItemConstructorOptions | Electron.MenuItem)[] = [
   {
     label: 'File',
@@ -23,7 +25,7 @@ const menuTemplate: (Electron.MenuItemConstructorOptions | Electron.MenuItem)[] 
           });
 
           if (result.filePaths.length > 0) {
-            const workspacePath = result.filePaths[0];
+            workspacePath = result.filePaths[0];
             (browserWindow as BrowserWindow).webContents.send('workspace-opened', workspacePath);
             loadFilestackConfig(workspacePath, browserWindow as BrowserWindow);
           }
@@ -108,9 +110,43 @@ ipcMain.on('open-workspace', async (event) => {
   });
 
   if (result.filePaths.length > 0) {
-    const workspacePath = result.filePaths[0];
+    workspacePath = result.filePaths[0];
     browserWindow.webContents.send('workspace-opened', workspacePath);
     loadFilestackConfig(workspacePath, browserWindow);
+  }
+});
+
+ipcMain.handle('get-workspace-file-contents', async (_event, files: string[]) => {
+  if (!workspacePath) {
+    return {};
+  }
+
+  const fileContents: Record<string, string> = {};
+  for (const file of files) {
+    try {
+      const filePath = path.join(workspacePath, file);
+      fileContents[file] = await fs.readFile(filePath, 'utf-8');
+    } catch (error) {
+      console.error(`Error reading file ${file}:`, error);
+      fileContents[file] = `Error reading file: ${error.message}`;
+    }
+  }
+  return fileContents;
+});
+
+ipcMain.handle('save-files', async (_event, filesToSave: Record<string, string>) => {
+  if (!workspacePath) {
+    return;
+  }
+
+  for (const [file, content] of Object.entries(filesToSave)) {
+    try {
+      const filePath = path.join(workspacePath, file);
+      await fs.writeFile(filePath, content, 'utf-8');
+    } catch (error) {
+      console.error(`Error writing file ${file}:`, error);
+      // We could send an error back to the renderer process here
+    }
   }
 });
 

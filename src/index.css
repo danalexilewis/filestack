@@ -5,3 +5,11 @@ body {
   max-width: 38rem;
   padding: 2rem;
 }
+
+.todo-highlight {
+  background-color: yellow;
+}
+
+.done-highlight {
+  background-color: lightgreen;
+}
