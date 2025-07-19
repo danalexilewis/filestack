@@ -10,77 +10,131 @@ import { Suggestion } from '@tiptap/suggestion';
 import { createRoot } from 'react-dom/client';
 import { SlashCommand } from '../components/SlashCommand';
 
-// Simple Monaco Block React Component
+// ============================================================================
+// MONACO BLOCK COMPONENT
+// ============================================================================
+// This component renders a Monaco editor within a TipTap block.
+// It handles:
+// - File editing with Monaco editor
+// - Unsaved changes tracking
+// - Save functionality
+// - Focus and selection management
+// ============================================================================
+
 /**
  * Monaco Block Component - Renders a Monaco editor within a TipTap block
- * Handles file editing, unsaved changes tracking, and save functionality
+ * 
+ * This is a complex component that integrates Monaco editor with TipTap.
+ * Key concepts to understand:
+ * - NodeViewProps: TipTap provides these props to custom node components
+ * - Monaco editor lifecycle: creation, focus, content changes, disposal
+ * - State management: tracking unsaved changes vs saved content
+ * - Selection sync: keeping TipTap and Monaco selection in sync
  */
-const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, selected, updateAttributes }) => {
-  const { fileContents, unsavedChanges, setUnsavedChanges, saveFile, markFileAsDirty } = useStore();
-  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const isInitializingRef = useRef(false);
-  const isUpdatingFromEditorRef = useRef(false);
+const MonacoBlockComponent: React.FC<NodeViewProps> = ({ 
+  node,           // The TipTap node containing our data
+  editor,         // The TipTap editor instance
+  getPos,         // Function to get the position of this node in the document
+  selected,       // Whether this node is currently selected in TipTap
+  updateAttributes // Function to update node attributes
+}) => {
+  // ============================================================================
+  // STATE AND REFS
+  // ============================================================================
   
-  const file = node.attrs.file;
-  const language = node.attrs.language;
-  const title = node.attrs.title;
+  // Get data from our global store
+  const { 
+    fileContents,        // Saved file contents (from disk)
+    unsavedChanges,      // Unsaved changes (in memory only)
+    setUnsavedChanges,   // Function to save changes to unsavedChanges
+    saveFile,           // Function to save unsaved changes to disk
+    markFileAsDirty     // Function to mark file as needing save
+  } = useStore();
   
-  // Subscribe to unsaved changes for this specific file
+  // Refs to track component state
+  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);  // Monaco editor instance
+  const containerRef = useRef<HTMLDivElement>(null);                           // DOM container for Monaco
+  const isInitializingRef = useRef(false);                                     // Prevent multiple initializations
+  const isUpdatingFromEditorRef = useRef(false);                               // Prevent infinite loops
+  
+  // Extract data from the TipTap node
+  const file = node.attrs.file;        // File path (e.g., "src/main.ts")
+  const language = node.attrs.language; // Programming language (e.g., "typescript")
+  const title = node.attrs.title;       // Display title (e.g., "Main TypeScript File")
+  
+  // Get current unsaved changes for this specific file
   const currentUnsavedChanges = unsavedChanges[file];
   
-  // Use TipTap's selection state instead of local isEditing
+  // TipTap selection state (whether this block is selected)
   const isSelected = selected;
   
+  // ============================================================================
+  // EVENT HANDLERS
+  // ============================================================================
+  
   /**
-   * Handle save button click - saves unsaved changes to the file store
+   * Handle save button click
+   * 
+   * When user clicks "Save", we move the unsaved changes to the saved file contents.
+   * This simulates writing the file to disk.
    */
   const handleSave = () => {
     if (editorRef.current) {
       saveFile(file);
     }
   };
-
+  
   /**
-   * Handle block click - sets TipTap selection to this block
+   * Handle block click
+   * 
+   * When user clicks on the block container, we tell TipTap to select this node.
+   * This enables editing mode for the Monaco editor.
    */
   const handleClick = () => {
-    // Only set TipTap selection if we're not already selected to prevent cursor reset
+    // Only set selection if we're not already selected (prevents cursor reset)
     if (!isSelected && getPos && editor) {
       editor.commands.setNodeSelection(getPos());
     }
   };
-
+  
   /**
    * Handle keyboard events on the block container
-   * Prevents TipTap from interfering when Monaco is focused
+   * 
+   * This prevents TipTap from interfering with Monaco editor keyboard handling.
+   * For example, when Monaco is focused, we don't want TipTap to handle Enter/Escape.
    */
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    // If Monaco is focused, don't let TipTap handle keyboard events
+    // If Monaco is focused, let Monaco handle all keyboard events
     if (editorRef.current && editorRef.current.hasWidgetFocus()) {
       return;
     }
     
+    // Handle Enter key to select this block
     if (event.key === 'Enter' && !isSelected) {
       event.preventDefault();
       if (getPos && editor) {
         editor.commands.focus();
         editor.commands.setNodeSelection(getPos());
       }
-    } else if (event.key === 'Escape' && isSelected) {
+    } 
+    // Handle Escape key to deselect this block
+    else if (event.key === 'Escape' && isSelected) {
       event.preventDefault();
       if (editor) {
         editor.commands.blur();
       }
     }
   };
-
+  
   /**
-   * Handle Monaco editor focus - syncs with TipTap selection
+   * Handle Monaco editor focus
+   * 
+   * When Monaco gets focus, we need to tell TipTap to select this node.
+   * This keeps the selection state in sync between Monaco and TipTap.
    */
   const handleMonacoFocus = () => {
     if (getPos && editor && !isSelected) {
-      // Only set TipTap selection if Monaco is actually focused and we're not already selected
+      // Small delay to ensure Monaco is actually focused
       setTimeout(() => {
         if (editorRef.current && editorRef.current.hasWidgetFocus() && !isSelected) {
           editor.commands.setNodeSelection(getPos());
@@ -88,14 +142,16 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
       }, 10);
     }
   };
-
+  
   /**
-   * Handle Monaco editor blur - clears TipTap selection when Monaco loses focus
+   * Handle Monaco editor blur
+   * 
+   * When Monaco loses focus, we clear the TipTap selection.
+   * This keeps the selection state in sync.
    */
   const handleMonacoBlur = () => {
-    // When Monaco loses focus, ensure TipTap selection is cleared
     if (getPos && editor && isSelected) {
-      // Use a small delay to allow for proper focus handling
+      // Small delay to allow for proper focus handling
       setTimeout(() => {
         if (editor && !editorRef.current?.hasWidgetFocus()) {
           editor.commands.blur();
@@ -103,15 +159,24 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
       }, 10);
     }
   };
-
-  // Handle when TipTap selection changes to sync Monaco focus and read-only state
+  
+  // ============================================================================
+  // MONACO EDITOR LIFECYCLE
+  // ============================================================================
+  
+  /**
+   * Effect to sync Monaco read-only state with TipTap selection
+   * 
+   * When the block is selected, Monaco should be editable.
+   * When the block is not selected, Monaco should be read-only.
+   */
   useEffect(() => {
     if (editorRef.current) {
       // Update read-only state without recreating the editor
       editorRef.current.updateOptions({ readOnly: !isSelected });
       
+      // When block becomes selected, focus the Monaco editor
       if (isSelected) {
-        // When the block becomes selected, focus the Monaco editor
         setTimeout(() => {
           if (editorRef.current && isSelected) {
             editorRef.current.focus();
@@ -120,51 +185,80 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
       }
     }
   }, [isSelected]);
-
+  
+  /**
+   * Main effect to create and manage the Monaco editor
+   * 
+   * This is the most complex part of the component. It handles:
+   * - Creating the Monaco editor
+   * - Setting up content and language
+   * - Managing editor lifecycle (focus, blur, content changes)
+   * - Cleaning up when component unmounts
+   */
   useEffect(() => {
-    if (!containerRef.current || !file || !language) {
-              // Cannot create Monaco editor - missing required props
+    // ============================================================================
+    // VALIDATION - Check if we can create an editor
+    // ============================================================================
+    
+    // We need a container element to mount Monaco
+    if (!containerRef.current) {
       return;
     }
-
-          // Wait for file contents to be available
+    
+    // We need file and language information
+    if (!file || !language) {
+      return;
+    }
+    
+    // We need file contents to be loaded
     if (fileContents[file] === undefined) {
       return;
     }
-
-  // Use unsaved changes if available, otherwise use file contents
-  const currentContent = unsavedChanges[file] !== undefined ? unsavedChanges[file] : fileContents[file];
-
-    // Don't recreate editor if the change came from this editor
+    
+    // Don't recreate editor if the change came from this editor itself
+    // This prevents infinite loops when content changes
     if (isUpdatingFromEditorRef.current) {
       return;
     }
     
+    // ============================================================================
+    // EDITOR CREATION
+    // ============================================================================
+    
+    // Mark that we're starting initialization
     isInitializingRef.current = true;
     
     // Use requestAnimationFrame to ensure DOM is ready
     const frameId = requestAnimationFrame(() => {
+      // Double-check container is still available
       if (!containerRef.current) {
         return;
       }
       
       try {
+        // ============================================================================
+        // MONACO MODEL MANAGEMENT
+        // ============================================================================
+        // Monaco uses "models" to represent file content. Each model can be shared
+        // between multiple editors (useful for split views, etc.)
+        
+        // Create a unique URI for this file
         const modelUri = monaco.Uri.parse(`inmemory://${file}`);
         
-        // Check if model already exists and reuse it, or create a new one
+        // Try to reuse existing model, or create a new one
         let model = monaco.editor.getModel(modelUri);
         if (model) {
-          // Update the model content if it's different
+          // Model exists - update its content if needed
           const currentValue = model.getValue();
           if (currentValue !== currentContent) {
             model.setValue(currentContent || '');
           }
           
-          // Check if the model is already attached to another editor
+          // Check if model is already attached to other editors (this is fine)
           const attachedEditors = monaco.editor.getEditors().filter(editor => editor.getModel() === model);
-          // We can still reuse the model, Monaco handles multiple editors on the same model
+          // Monaco handles multiple editors on the same model automatically
         } else {
-          // Create Monaco editor with unique model
+          // Create new model with file content
           model = monaco.editor.createModel(
             currentContent || '',
             language,
@@ -172,6 +266,11 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
           );
         }
         
+        // ============================================================================
+        // MONACO EDITOR CREATION
+        // ============================================================================
+        
+        // Create the Monaco editor with our model
         const monacoEditor = monaco.editor.create(containerRef.current, {
           model: model,
           theme: 'vs-dark',
@@ -189,17 +288,19 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
           folding: false,
           lineDecorationsWidth: 10,
           lineNumbersMinChars: 3,
-          // Dynamic height settings
           fixedOverflowWidgets: true,
-          // Allow scroll events to bubble up
           mouseWheelScrollSensitivity: 0,
           fastScrollSensitivity: 0,
         });
-
+        
         // Set initial read-only state
         monacoEditor.updateOptions({ readOnly: !isSelected });
         
-        // Function to adjust editor height based on content
+        // ============================================================================
+        // DYNAMIC HEIGHT ADJUSTMENT
+        // ============================================================================
+        // Monaco doesn't auto-resize, so we need to adjust height based on content
+        
         const adjustEditorHeight = () => {
           if (containerRef.current && monacoEditor) {
             const lineCount = monacoEditor.getModel()?.getLineCount() || 1;
@@ -213,20 +314,21 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
           }
         };
         
-        // Adjust height initially
+        // Adjust height initially and when content changes
         setTimeout(adjustEditorHeight, 10);
-        
-        // Adjust height when content changes
         const contentChangeDisposable = monacoEditor.onDidChangeModelContent(() => {
           adjustEditorHeight();
         });
         
-        // Handle Monaco scroll events using Monaco's built-in scroll event
+        // ============================================================================
+        // SCROLL EVENT HANDLING
+        // ============================================================================
+        // When Monaco scrolls, we want to scroll the parent container too
+        
         const scrollDisposable = monacoEditor.onDidScrollChange((e) => {
-          // When Monaco scrolls, also scroll the parent
           if (containerRef.current?.parentElement) {
             const scrollEvent = new WheelEvent('wheel', {
-              deltaY: e.scrollTop > 0 ? 1 : -1, // Simple direction indicator
+              deltaY: e.scrollTop > 0 ? 1 : -1,
               bubbles: true,
               cancelable: true,
             });
@@ -234,11 +336,8 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
           }
         });
         
-        // Note: Monaco doesn't have onMouseWheel, using DOM wheel events instead
-        
-        // Also add wheel event listener to Monaco's DOM for direct wheel events
+        // Also handle direct wheel events on Monaco's DOM
         const handleMonacoWheel = (e: WheelEvent) => {
-          // Bubble wheel events up to parent components
           e.stopPropagation();
           const newEvent = new WheelEvent('wheel', {
             deltaX: e.deltaX,
@@ -251,33 +350,24 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
           containerRef.current?.parentElement?.dispatchEvent(newEvent);
         };
         
+        // Add wheel event listeners to Monaco's DOM elements
         const monacoDomElement = monacoEditor.getDomNode();
         if (monacoDomElement) {
-          // Use capture phase to intercept events before Monaco processes them
           monacoDomElement.addEventListener('wheel', handleMonacoWheel, { passive: false, capture: true });
           
-          // Also add to the scrollable element inside Monaco
           const scrollableElement = monacoDomElement.querySelector('.monaco-scrollable-element');
           if (scrollableElement) {
             scrollableElement.addEventListener('wheel', handleMonacoWheel, { passive: false, capture: true });
           }
         }
         
-        if (isSelected) {
-          // Force focus and ensure editing is enabled
-          setTimeout(() => {
-            if (monacoEditor && isSelected) {
-              monacoEditor.focus();
-              // Read-only state is handled by the effect above
-            }
-          }, 50);
-        }
-
-        // Monaco editor created successfully
-
-        // Track changes and update store
+        // ============================================================================
+        // CONTENT CHANGE TRACKING
+        // ============================================================================
+        // This is the core functionality - track when user makes changes
+        
         const changeDisposable = monacoEditor.onDidChangeModelContent(() => {
-          // Track changes when Monaco has focus, regardless of TipTap selection state
+          // Only track changes when Monaco has focus (user is actually typing)
           if (monacoEditor.hasWidgetFocus()) {
             const newValue = monacoEditor.getValue();
             
@@ -291,53 +381,68 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
             }, 100);
           }
         });
-
-        // Handle Monaco focus/blur events
+        
+        // ============================================================================
+        // FOCUS/BLUR EVENT HANDLING
+        // ============================================================================
+        
         const focusDisposable = monacoEditor.onDidFocusEditorWidget(() => {
-          // Skip focus handling entirely when already selected to prevent any interference
+          // Only handle focus if we're not already selected
           if (!isSelected) {
             handleMonacoFocus();
           }
         });
+        
         const blurDisposable = monacoEditor.onDidBlurEditorWidget(() => {
           handleMonacoBlur();
         });
-
+        
+        // ============================================================================
+        // FINAL SETUP
+        // ============================================================================
+        
+        // Store reference to the editor
         editorRef.current = monacoEditor;
         
-        // Mark initialization as complete after a short delay
+        // Mark initialization as complete
         setTimeout(() => {
           isInitializingRef.current = false;
         }, 100);
-
+        
+        // ============================================================================
+        // CLEANUP FUNCTION
+        // ============================================================================
+        // This function runs when the effect is cleaned up (component unmounts, dependencies change)
+        
         return () => {
+          // Dispose all Monaco event listeners
           changeDisposable.dispose();
           focusDisposable.dispose();
           blurDisposable.dispose();
           contentChangeDisposable.dispose();
-          
-          // Remove scroll event listeners
           scrollDisposable.dispose();
+          
+          // Remove wheel event listeners
           const monacoDomElement = monacoEditor.getDomNode();
           if (monacoDomElement) {
             monacoDomElement.removeEventListener('wheel', handleMonacoWheel, { capture: true });
             
-            // Also remove from scrollable element
             const scrollableElement = monacoDomElement.querySelector('.monaco-scrollable-element');
             if (scrollableElement) {
               scrollableElement.removeEventListener('wheel', handleMonacoWheel, { capture: true });
             }
           }
           
+          // Dispose the editor (but keep the model for reuse)
           monacoEditor.dispose();
-          // Don't dispose the model as it might be reused by other editors
-          // The model will be cleaned up when the app closes or when explicitly disposed
         };
+        
       } catch (error) {
         console.error('Error creating Monaco editor for:', file, error);
       }
     });
-
+    
+    // Cleanup function for the effect
     return () => {
       cancelAnimationFrame(frameId);
       if (editorRef.current) {
@@ -346,10 +451,11 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
       }
     };
   }, [file, language, fileContents[file]]); // Recreate when file, language, or file contents change
-
-  // Note: readOnly state is now handled in the main editor creation effect
-  // since we recreate the editor when selection changes
-
+  
+  // ============================================================================
+  // COMPONENT CLEANUP
+  // ============================================================================
+  
   // Cleanup effect to dispose editor when component unmounts or file changes
   useEffect(() => {
     return () => {
@@ -359,16 +465,23 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
       }
     };
   }, [file]);
-
+  
+  // ============================================================================
+  // RENDER
+  // ============================================================================
+  
+  // Validate required props
   if (!file || !language) {
     return <NodeViewWrapper>Invalid Monaco block</NodeViewWrapper>;
   }
-
+  
+  // Prepare display data
   const displayTitle = title || `${file} (${language})`;
   const isContentLoaded = fileContents[file] !== undefined;
   
-
-
+  // Use unsaved changes if available, otherwise use saved file contents
+  const currentContent = unsavedChanges[file] !== undefined ? unsavedChanges[file] : fileContents[file];
+  
   return (
     <NodeViewWrapper>
       <div 
@@ -382,12 +495,16 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
         `}
         onClick={handleClick}
         onKeyDown={handleKeyDown}
-        // Scroll events are handled directly by Monaco editor listeners
         tabIndex={0}
         role="button"
         aria-label={`Click to edit ${displayTitle}`}
       >
-                        <div 
+        {/* ============================================================================
+            HEADER BAR
+            ============================================================================
+            Shows file title, path, status indicators, and save button
+        */}
+        <div 
           className={`
             px-3 py-2 border-b border-gray-300 text-sm font-bold
             flex justify-between items-center transition-colors duration-200 ease-in-out
@@ -410,6 +527,7 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
             position: 'relative'
           }}
         >
+          {/* File title and path */}
           <div className="flex flex-row" style={{ display: 'flex', flexDirection: 'row' }}>
             <span>{displayTitle}</span>
             <span 
@@ -424,7 +542,10 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
               &nbsp;- {file}
             </span>
           </div>
+          
+          {/* Status indicators and save button */}
           <div className="flex items-center gap-2" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            {/* Show save button only when there are unsaved changes */}
             {currentUnsavedChanges !== undefined && (
               <button
                 onClick={(e) => {
@@ -448,7 +569,8 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
               </button>
             )}
           </div>
-          {/* Status dot in top right */}
+          
+          {/* Status dot - shows save state */}
           <div 
             style={{
               position: 'absolute',
@@ -463,12 +585,19 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
             }}
             title={`Status: ${currentUnsavedChanges !== undefined ? 'Unsaved changes' : 'Saved'}`}
           />
-          {/* Debug logging for status dot */}
         </div>
+        
+        {/* ============================================================================
+            MONACO EDITOR CONTAINER
+            ============================================================================
+            This div will be replaced by the Monaco editor
+        */}
         <div 
           ref={containerRef}
           className="min-h-[200px] w-full transition-height duration-200 ease-in-out"
         />
+        
+        {/* Loading indicator */}
         {!isContentLoaded && (
           <div className="absolute inset-0 bg-black/10 flex items-center justify-center text-gray-500 text-sm pointer-events-none">
             Loading file content...
@@ -479,9 +608,18 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
   );
 };
 
+// ============================================================================
+// TIPTAP NODE EXTENSIONS
+// ============================================================================
+
 /**
  * Monaco Block Extension - Defines a custom TipTap node for Monaco editors
- * Handles the creation and rendering of Monaco editor blocks within the document
+ * 
+ * This extension tells TipTap how to:
+ * - Parse Monaco blocks from HTML
+ * - Render Monaco blocks to HTML
+ * - Handle Monaco blocks in the editor
+ * - Create React components for Monaco blocks
  */
 const MonacoBlock = Node.create({
   name: 'monacoBlock',
@@ -490,6 +628,7 @@ const MonacoBlock = Node.create({
   selectable: true,
   draggable: true,
   
+  // Define the attributes this node can have
   addAttributes() {
     return {
       file: {
@@ -504,6 +643,7 @@ const MonacoBlock = Node.create({
     }
   },
 
+  // Tell TipTap how to parse this node from HTML
   parseHTML() {
     return [
       {
@@ -512,10 +652,12 @@ const MonacoBlock = Node.create({
     ]
   },
 
+  // Tell TipTap how to render this node to HTML
   renderHTML({ HTMLAttributes }) {
     return ['div', mergeAttributes(HTMLAttributes, { 'data-monaco-block': 'true' })]
   },
 
+  // Tell TipTap to use our React component
   addNodeView() {
     return ReactNodeViewRenderer(MonacoBlockComponent);
   },
@@ -523,7 +665,9 @@ const MonacoBlock = Node.create({
 
 /**
  * Slash Commands Extension - Provides slash command functionality
- * Uses TipTap's suggestion system to show command menu when typing '/'
+ * 
+ * This extension shows a command menu when the user types '/' at the beginning of a line.
+ * It uses TipTap's suggestion system to handle the UI and interactions.
  */
 const SlashCommands = Extension.create({
   name: 'slashCommands',
@@ -534,8 +678,9 @@ const SlashCommands = Extension.create({
         editor: this.editor,
         char: '/',
         startOfLine: true,
+        
+        // What to do when a command is selected
         command: ({ editor, range, props }) => {
-          console.log('Command executed with props:', props)
           // Delete the trigger character and replace with the selected command
           editor
             .chain()
@@ -544,6 +689,8 @@ const SlashCommands = Extension.create({
             .insertContent(props.command)
             .run()
         },
+        
+        // Available commands
         items: ({ query }) => {
           const commands = [
             { title: 'Heading', command: '<h1>Heading</h1>' },
@@ -553,6 +700,7 @@ const SlashCommands = Extension.create({
             { title: 'Monaco Editor', command: 'monaco' },
           ]
           
+          // Filter commands based on user input
           if (query) {
             return commands.filter(item => 
               item.title.toLowerCase().includes(query.toLowerCase())
@@ -561,19 +709,21 @@ const SlashCommands = Extension.create({
           
           return commands
         },
+        
+        // How to render the command menu
         render: () => {
           let popup: any
           let selectedIndex = 0
           let root: any
 
           return {
+            // When slash command starts
             onStart: (props) => {
-              console.log('Slash command onStart called with props:', props)
-              
+              // Create popup element
               popup = document.createElement('div')
               popup.className = 'slash-command-popup'
               
-              // Calculate position based on the cursor position
+              // Calculate position based on cursor
               const { range } = props
               const coords = props.editor.view.coordsAtPos(range.from)
               
@@ -583,36 +733,30 @@ const SlashCommands = Extension.create({
                 left: ${coords.left}px;
                 top: ${coords.bottom + 10}px;
               `
-              // Add Tailwind CSS classes to ensure styles are available
-              popup.className = 'slash-command-popup'
               document.body.appendChild(popup)
               
-              // Create React root and render the component
+              // Create React root and render component
               root = createRoot(popup)
-              
-              console.log('Rendering SlashCommand with items:', props.items)
-              
               root.render(
                 <SlashCommand
                   items={props.items}
                   selectedIndex={selectedIndex}
                   onSelect={(command) => {
-                    console.log('Command selected:', command)
                     props.command({ editor: props.editor, range: props.range, props: { command } })
                   }}
                   query={props.query}
                 />
               )
             },
+            
+            // When slash command updates (user types more)
             onUpdate: (props) => {
               if (root) {
-                console.log('Slash command onUpdate with items:', props.items)
                 root.render(
                   <SlashCommand
                     items={props.items}
                     selectedIndex={selectedIndex}
                     onSelect={(command) => {
-                      console.log('Command selected from update:', command)
                       props.command({ editor: props.editor, range: props.range, props: { command } })
                     }}
                     query={props.query}
@@ -620,6 +764,8 @@ const SlashCommands = Extension.create({
                 )
               }
             },
+            
+            // Handle keyboard navigation
             onKeyDown: (props) => {
               if (props.event.key === 'Escape') {
                 props.event.preventDefault()
@@ -668,6 +814,8 @@ const SlashCommands = Extension.create({
               }
               return false
             },
+            
+            // When slash command ends
             onExit: () => {
               if (root) {
                 root.unmount()
@@ -683,20 +831,48 @@ const SlashCommands = Extension.create({
   },
 })
 
-
+// ============================================================================
+// MAIN EDITOR COMPONENT
+// ============================================================================
 
 /**
  * Main Editor Component - Renders the TipTap editor with Monaco blocks
- * Handles view switching, content loading, and save functionality
+ * 
+ * This is the main component that:
+ * - Manages the TipTap editor instance
+ * - Handles view switching and content loading
+ * - Provides the save all functionality
+ * - Configures Monaco for different file types
  */
 const Editor = () => {
-  const { activeView, views, fileContents, unsavedChanges, saveAllFiles } = useStore();
+  // ============================================================================
+  // STATE
+  // ============================================================================
+  
+  // Get data and functions from our global store
+  const { 
+    activeView,      // Currently selected view
+    views,           // All available views
+    fileContents,    // Saved file contents
+    unsavedChanges,  // Unsaved changes
+    saveAllFiles     // Function to save all files
+  } = useStore();
+  
+  // Track the current view to detect changes
   const currentViewRef = useRef<string | null>(null);
-
+  
+  // Find the current view object
   const currentView = views.find(view => view.title === activeView);
-
+  
+  // ============================================================================
+  // UTILITY FUNCTIONS
+  // ============================================================================
+  
   /**
    * Get Monaco language identifier from file extension
+   * 
+   * Monaco needs to know what language a file is written in to provide
+   * proper syntax highlighting and IntelliSense.
    */
   const getLanguageFromFile = (filename: string): string => {
     const ext = filename.split('.').pop()?.toLowerCase();
@@ -744,11 +920,15 @@ const Editor = () => {
         return 'plaintext';
     }
   };
-
+  
   /**
    * Configure Monaco editor for test files with Jest globals
+   * 
+   * This adds TypeScript definitions for Jest functions like describe, it, expect, etc.
+   * so that Monaco can provide proper IntelliSense in test files.
    */
   const configureMonacoForTestFiles = () => {
+    // Add Jest globals to TypeScript
     monaco.languages.typescript.typescriptDefaults.addExtraLib(`
       declare global {
         function describe(name: string, fn: () => void): void;
@@ -762,6 +942,7 @@ const Editor = () => {
       }
     `, 'jest-globals.d.ts');
 
+    // Configure TypeScript compiler options
     monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
       target: monaco.languages.typescript.ScriptTarget.ESNext,
       module: monaco.languages.typescript.ModuleKind.ESNext,
@@ -775,56 +956,71 @@ const Editor = () => {
       types: ['jest', 'node']
     });
   };
-
-  // TipTap editor configuration with Monaco blocks and slash commands
+  
+  // ============================================================================
+  // TIPTAP EDITOR CONFIGURATION
+  // ============================================================================
+  
+  // Create and configure the TipTap editor
   const editor = useEditor({
     extensions: [
+      // Basic editor features
       StarterKit.configure({
-        codeBlock: false,
+        codeBlock: false, // We'll use our own Monaco blocks instead
       }),
+      
+      // Code block support (for non-Monaco code)
       CodeBlock.configure({
         HTMLAttributes: {
           class: 'monaco-code-block',
         },
       }),
+      
+      // Our custom Monaco block extension
       MonacoBlock,
+      
+      // Slash commands
       SlashCommands,
+      
+      // Placeholder text
       Placeholder.configure({
         placeholder: 'Type / to see commands...',
       }),
     ],
+    
+    // Initial content (empty)
     content: '',
+    
+    // Handle content updates
     onUpdate: ({ editor }) => {
       const content = editor.getHTML();
       console.log('Content updated:', content);
     },
+    
+    // Editor styling
     editorProps: {
       attributes: {
         class: 'prose prose-sm sm:prose lg:prose-lg xl:prose-2xl mx-auto focus:outline-none',
       },
     },
   });
-
+  
+  // ============================================================================
+  // EFFECTS
+  // ============================================================================
+  
   // Initialize content when view changes or file contents update
   useEffect(() => {
     if (currentView && currentView.title !== currentViewRef.current) {
       currentViewRef.current = currentView.title;
       
-      console.log('Current view:', currentView);
-      console.log('Has content:', !!currentView.content);
-      console.log('Content length:', currentView.content?.length);
-      
       if (editor && currentView.content) {
-        console.log('Rendering content from JSON file');
-        
-        // Build content array for TipTap
+        // Build content array for TipTap from the view's content definition
         const contentArray: any[] = [];
         
         currentView.content.forEach((item, index) => {
-          console.log(`Processing item ${index}:`, item);
           switch (item.type) {
             case 'heading':
-              console.log(`Adding heading: h${item.level} - ${item.text}`);
               contentArray.push({
                 type: 'heading',
                 attrs: { level: item.level },
@@ -832,14 +1028,12 @@ const Editor = () => {
               });
               break;
             case 'paragraph':
-              console.log(`Adding paragraph: ${item.text}`);
               contentArray.push({
                 type: 'paragraph',
                 content: [{ type: 'text', text: item.text }]
               });
               break;
             case 'monaco':
-              console.log(`Adding Monaco block: ${item.title} - ${item.file} (${item.language})`);
               contentArray.push({
                 type: 'monacoBlock',
                 attrs: {
@@ -850,7 +1044,6 @@ const Editor = () => {
               });
               break;
             case 'list': {
-              console.log(`Adding list with ${item.items.length} items`);
               contentArray.push({
                 type: 'bulletList',
                 content: item.items.map(item => ({
@@ -863,20 +1056,20 @@ const Editor = () => {
           }
         });
         
-        // Insert all content at once
+        // Set the content in TipTap
         editor.commands.setContent(contentArray);
-        console.log('Set content array:', contentArray);
+        
       } else if (editor) {
-        // Fallback to old behavior if no content is defined
+        // Fallback: create content from file list
         editor.commands.clearContent();
         
-        // Insert the heading
+        // Add heading
         editor.chain().focus().insertContent(`<h1>${currentView.title}</h1>`).run();
         
-        // Insert the description
+        // Add description
         editor.chain().focus().insertContent(`<p>This view contains ${currentView.files.length} files related to ${currentView.title.toLowerCase()}.</p>`).run();
         
-        // Insert Monaco blocks for each file
+        // Add Monaco blocks for each file
         currentView.files.forEach((file) => {
           editor.chain().focus().insertContent({
             type: 'monacoBlock',
@@ -887,16 +1080,20 @@ const Editor = () => {
             },
           }).run();
         });
-        
-        console.log('Inserted fallback content for files:', currentView.files);
       }
     }
   }, [currentView, fileContents, editor]);
-
+  
+  // Configure Monaco for test files on component mount
   useEffect(() => {
     configureMonacoForTestFiles();
   }, []);
-
+  
+  // ============================================================================
+  // RENDER
+  // ============================================================================
+  
+  // Show placeholder if no view is selected
   if (!activeView || !currentView) {
     return (
       <div className="p-5">
@@ -904,9 +1101,10 @@ const Editor = () => {
       </div>
     );
   }
-
+  
   return (
     <div className="h-full flex flex-col">
+      {/* Header with view title and save all button */}
       <div className="p-5 border-b border-gray-200 bg-white">
         <div className="flex justify-between items-center">
           <h2 className="text-2xl font-bold text-gray-900">{currentView.title}</h2>
@@ -920,14 +1118,14 @@ const Editor = () => {
           )}
         </div>
       </div>
+      
+      {/* Main editor area */}
       <div className="flex-1 overflow-y-auto relative">
         <div className="p-5">
           <div className="border border-gray-300 rounded-lg bg-white shadow-sm">
             <EditorContent editor={editor} />
           </div>
         </div>
-
-        
       </div>
     </div>
   );
