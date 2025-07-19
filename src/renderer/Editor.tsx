@@ -32,11 +32,7 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
 
   const handleClick = () => {
     // Focus the TipTap node when clicked
-    if (getPos && editor) {
-      editor.commands.focus();
-      editor.commands.setNodeSelection(getPos());
-    }
-  };
+      };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Enter' && !isSelected) {
@@ -165,6 +161,9 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
           lineNumbersMinChars: 3,
           // Dynamic height settings
           fixedOverflowWidgets: true,
+          // Allow scroll events to bubble up
+          mouseWheelScrollSensitivity: 0,
+          fastScrollSensitivity: 0,
         });
 
         // Ensure the editor is properly configured for editing
@@ -194,6 +193,50 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
         const contentChangeDisposable = monacoEditor.onDidChangeModelContent(() => {
           adjustEditorHeight();
         });
+        
+        // Handle Monaco scroll events using Monaco's built-in scroll event
+        const scrollDisposable = monacoEditor.onDidScrollChange((e) => {
+          console.log(`Monaco scroll change for ${file}:`, e);
+          // When Monaco scrolls, also scroll the parent
+          if (containerRef.current?.parentElement) {
+            const scrollEvent = new WheelEvent('wheel', {
+              deltaY: e.scrollTop > 0 ? 1 : -1, // Simple direction indicator
+              bubbles: true,
+              cancelable: true,
+            });
+            containerRef.current.parentElement.dispatchEvent(scrollEvent);
+          }
+        });
+        
+        // Note: Monaco doesn't have onMouseWheel, using DOM wheel events instead
+        
+        // Also add wheel event listener to Monaco's DOM for direct wheel events
+        const handleMonacoWheel = (e: WheelEvent) => {
+          console.log(`Direct wheel event for ${file}:`, e);
+          // Bubble wheel events up to parent components
+          e.stopPropagation();
+          const newEvent = new WheelEvent('wheel', {
+            deltaX: e.deltaX,
+            deltaY: e.deltaY,
+            deltaZ: e.deltaZ,
+            deltaMode: e.deltaMode,
+            bubbles: true,
+            cancelable: true,
+          });
+          containerRef.current?.parentElement?.dispatchEvent(newEvent);
+        };
+        
+        const monacoDomElement = monacoEditor.getDomNode();
+        if (monacoDomElement) {
+          // Use capture phase to intercept events before Monaco processes them
+          monacoDomElement.addEventListener('wheel', handleMonacoWheel, { passive: false, capture: true });
+          
+          // Also add to the scrollable element inside Monaco
+          const scrollableElement = monacoDomElement.querySelector('.monaco-scrollable-element');
+          if (scrollableElement) {
+            scrollableElement.addEventListener('wheel', handleMonacoWheel, { passive: false, capture: true });
+          }
+        }
         
         if (isSelected) {
           // Force focus and ensure editing is enabled
@@ -243,6 +286,20 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
           focusDisposable.dispose();
           blurDisposable.dispose();
           contentChangeDisposable.dispose();
+          
+          // Remove scroll event listeners
+          scrollDisposable.dispose();
+          const monacoDomElement = monacoEditor.getDomNode();
+          if (monacoDomElement) {
+            monacoDomElement.removeEventListener('wheel', handleMonacoWheel, { capture: true });
+            
+            // Also remove from scrollable element
+            const scrollableElement = monacoDomElement.querySelector('.monaco-scrollable-element');
+            if (scrollableElement) {
+              scrollableElement.removeEventListener('wheel', handleMonacoWheel, { capture: true });
+            }
+          }
+          
           monacoEditor.dispose();
           // Don't dispose the model as it might be reused by other editors
           // The model will be cleaned up when the app closes or when explicitly disposed
@@ -324,6 +381,7 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
         }}
         onClick={handleClick}
         onKeyDown={handleKeyDown}
+        // Scroll events are handled directly by Monaco editor listeners
         tabIndex={0}
         role="button"
         aria-label={`Click to edit ${displayTitle}`}
@@ -395,26 +453,40 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
             Loading file content...
           </div>
         )}
-        {isContentLoaded && !isSelected && (
-          <div style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0,0,0,0.05)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#666',
-            fontSize: '14px',
-            pointerEvents: 'none',
-            opacity: 0.7,
-            transition: 'opacity 0.2s ease'
-          }}>
-            Click to edit
-          </div>
-        )}
+        {/* Permanent scroll event handler overlay */}
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: isSelected ? 'transparent' : 'rgba(0,0,0,0.05)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#666',
+          fontSize: '14px',
+          pointerEvents: isSelected ? 'none' : 'auto',
+          opacity: isSelected ? 0 : 0.7,
+          transition: 'opacity 0.2s ease, background-color 0.2s ease',
+          zIndex: 10
+        }}
+        onWheel={(e) => {
+          // Always allow scroll events to bubble up to parent
+          e.stopPropagation();
+          const newEvent = new WheelEvent('wheel', {
+            deltaX: e.deltaX,
+            deltaY: e.deltaY,
+            deltaZ: e.deltaZ,
+            deltaMode: e.deltaMode,
+            bubbles: true,
+            cancelable: true,
+          });
+          e.currentTarget.parentElement?.dispatchEvent(newEvent);
+        }}
+        >
+          {!isSelected && 'Click to edit'}
+        </div>
       </div>
     </NodeViewWrapper>
   );
