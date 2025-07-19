@@ -11,8 +11,12 @@ import { createRoot } from 'react-dom/client';
 import { SlashCommand } from '../components/SlashCommand';
 
 // Simple Monaco Block React Component
+/**
+ * Monaco Block Component - Renders a Monaco editor within a TipTap block
+ * Handles file editing, unsaved changes tracking, and save functionality
+ */
 const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, selected, updateAttributes }) => {
-  const { fileContents, setFileContents, markFileAsDirty } = useStore();
+  const { fileContents, unsavedChanges, setUnsavedChanges, saveFile, markFileAsDirty } = useStore();
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isInitializingRef = useRef(false);
@@ -22,33 +26,38 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
   const language = node.attrs.language;
   const title = node.attrs.title;
   
+  // Subscribe to unsaved changes for this specific file
+  const currentUnsavedChanges = unsavedChanges[file];
+  
   // Use TipTap's selection state instead of local isEditing
   const isSelected = selected;
   
+  /**
+   * Handle save button click - saves unsaved changes to the file store
+   */
   const handleSave = () => {
     if (editorRef.current) {
-      const content = editorRef.current.getValue();
-      setFileContents(file, content);
-      markFileAsDirty(file);
-      console.log('Saved file:', file);
+      saveFile(file);
     }
   };
 
+  /**
+   * Handle block click - sets TipTap selection to this block
+   */
   const handleClick = () => {
-    console.log(`handleClick called for ${file}, isSelected: ${isSelected}`);
     // Only set TipTap selection if we're not already selected to prevent cursor reset
     if (!isSelected && getPos && editor) {
-      console.log(`Setting TipTap selection from click for ${file}`);
       editor.commands.setNodeSelection(getPos());
-    } else {
-      console.log(`Click ignored - already selected or missing editor/getPos for ${file}`);
     }
   };
 
+  /**
+   * Handle keyboard events on the block container
+   * Prevents TipTap from interfering when Monaco is focused
+   */
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     // If Monaco is focused, don't let TipTap handle keyboard events
     if (editorRef.current && editorRef.current.hasWidgetFocus()) {
-      console.log(`Monaco is focused, preventing TipTap keyboard handling for ${file}`);
       return;
     }
     
@@ -66,20 +75,23 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
     }
   };
 
-  // Handle Monaco editor focus/blur to sync with TipTap selection
+  /**
+   * Handle Monaco editor focus - syncs with TipTap selection
+   */
   const handleMonacoFocus = () => {
-    console.log(`handleMonacoFocus called for ${file}, isSelected: ${isSelected}`);
     if (getPos && editor && !isSelected) {
       // Only set TipTap selection if Monaco is actually focused and we're not already selected
       setTimeout(() => {
         if (editorRef.current && editorRef.current.hasWidgetFocus() && !isSelected) {
-          console.log(`Setting TipTap selection for ${file}`);
           editor.commands.setNodeSelection(getPos());
         }
       }, 10);
     }
   };
 
+  /**
+   * Handle Monaco editor blur - clears TipTap selection when Monaco loses focus
+   */
   const handleMonacoBlur = () => {
     // When Monaco loses focus, ensure TipTap selection is cleared
     if (getPos && editor && isSelected) {
@@ -111,34 +123,28 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
 
   useEffect(() => {
     if (!containerRef.current || !file || !language) {
-      console.log('Cannot create Monaco editor:', { 
-        hasContainer: !!containerRef.current, 
-        hasFile: !!file, 
-        hasLanguage: !!language 
-      });
+              // Cannot create Monaco editor - missing required props
       return;
     }
 
-    // Wait for file contents to be available
+          // Wait for file contents to be available
     if (fileContents[file] === undefined) {
-      console.log(`Waiting for file contents to load for ${file}`);
       return;
     }
+
+  // Use unsaved changes if available, otherwise use file contents
+  const currentContent = unsavedChanges[file] !== undefined ? unsavedChanges[file] : fileContents[file];
 
     // Don't recreate editor if the change came from this editor
     if (isUpdatingFromEditorRef.current) {
-      console.log(`Skipping editor recreation for ${file} - change came from editor`);
       return;
     }
-
-    console.log('Creating Monaco editor for:', file, 'selected:', isSelected, 'content length:', fileContents[file]?.length || 0);
     
     isInitializingRef.current = true;
     
     // Use requestAnimationFrame to ensure DOM is ready
     const frameId = requestAnimationFrame(() => {
       if (!containerRef.current) {
-        console.log('Container not ready, retrying...');
         return;
       }
       
@@ -148,25 +154,19 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
         // Check if model already exists and reuse it, or create a new one
         let model = monaco.editor.getModel(modelUri);
         if (model) {
-          console.log(`Reusing existing model for ${file}`);
           // Update the model content if it's different
           const currentValue = model.getValue();
-          if (currentValue !== fileContents[file]) {
-            console.log(`Updating model content for ${file}`);
-            model.setValue(fileContents[file] || '');
+          if (currentValue !== currentContent) {
+            model.setValue(currentContent || '');
           }
           
           // Check if the model is already attached to another editor
           const attachedEditors = monaco.editor.getEditors().filter(editor => editor.getModel() === model);
-          if (attachedEditors.length > 0) {
-            console.log(`Model for ${file} is already attached to ${attachedEditors.length} editor(s)`);
-            // We can still reuse the model, Monaco handles multiple editors on the same model
-          }
+          // We can still reuse the model, Monaco handles multiple editors on the same model
         } else {
-          console.log(`Creating new model for ${file}`);
           // Create Monaco editor with unique model
           model = monaco.editor.createModel(
-            fileContents[file] || '',
+            currentContent || '',
             language,
             modelUri
           );
@@ -196,9 +196,6 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
           fastScrollSensitivity: 0,
         });
 
-        // Ensure the editor is properly configured for editing
-        console.log(`Editor created with readOnly: ${!isSelected} for ${file}`);
-        
         // Set initial read-only state
         monacoEditor.updateOptions({ readOnly: !isSelected });
         
@@ -226,7 +223,6 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
         
         // Handle Monaco scroll events using Monaco's built-in scroll event
         const scrollDisposable = monacoEditor.onDidScrollChange((e) => {
-          console.log(`Monaco scroll change for ${file}:`, e);
           // When Monaco scrolls, also scroll the parent
           if (containerRef.current?.parentElement) {
             const scrollEvent = new WheelEvent('wheel', {
@@ -242,7 +238,6 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
         
         // Also add wheel event listener to Monaco's DOM for direct wheel events
         const handleMonacoWheel = (e: WheelEvent) => {
-          console.log(`Direct wheel event for ${file}:`, e);
           // Bubble wheel events up to parent components
           e.stopPropagation();
           const newEvent = new WheelEvent('wheel', {
@@ -278,17 +273,18 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
           }, 50);
         }
 
-        console.log('Monaco editor created successfully for:', file, 'readOnly:', !isSelected, 'with content length:', fileContents[file]?.length || 0);
+        // Monaco editor created successfully
 
         // Track changes and update store
         const changeDisposable = monacoEditor.onDidChangeModelContent(() => {
-          if (isSelected && !isInitializingRef.current) {
+          // Track changes when Monaco has focus, regardless of TipTap selection state
+          if (monacoEditor.hasWidgetFocus()) {
             const newValue = monacoEditor.getValue();
-            console.log(`Content changed for ${file}:`, newValue.substring(0, 100) + '...');
+            
             // Set flag to prevent editor recreation
             isUpdatingFromEditorRef.current = true;
-            setFileContents(file, newValue);
-            markFileAsDirty(file);
+            setUnsavedChanges(file, newValue);
+            
             // Reset flag after a short delay
             setTimeout(() => {
               isUpdatingFromEditorRef.current = false;
@@ -298,22 +294,13 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
 
         // Handle Monaco focus/blur events
         const focusDisposable = monacoEditor.onDidFocusEditorWidget(() => {
-          console.log(`Monaco editor focused for ${file}, isSelected: ${isSelected}, cursor position:`, monacoEditor.getPosition());
           // Skip focus handling entirely when already selected to prevent any interference
           if (!isSelected) {
             handleMonacoFocus();
-          } else {
-            console.log(`Monaco focused but already selected, skipping all TipTap interaction for ${file}`);
           }
         });
         const blurDisposable = monacoEditor.onDidBlurEditorWidget(() => {
-          console.log(`Monaco editor blurred for ${file}`);
           handleMonacoBlur();
-        });
-        
-        // Monitor cursor position changes to debug cursor reset issues
-        const cursorPositionDisposable = monacoEditor.onDidChangeCursorPosition((e) => {
-          console.log(`Cursor position changed for ${file}:`, e.position, 'reason:', e.reason);
         });
 
         editorRef.current = monacoEditor;
@@ -321,15 +308,12 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
         // Mark initialization as complete after a short delay
         setTimeout(() => {
           isInitializingRef.current = false;
-          console.log(`Editor initialization complete for ${file}`);
         }, 100);
 
         return () => {
-          console.log(`Disposing Monaco editor for ${file}`);
           changeDisposable.dispose();
           focusDisposable.dispose();
           blurDisposable.dispose();
-          cursorPositionDisposable.dispose();
           contentChangeDisposable.dispose();
           
           // Remove scroll event listeners
@@ -357,35 +341,11 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
     return () => {
       cancelAnimationFrame(frameId);
       if (editorRef.current) {
-        console.log(`Cleaning up Monaco editor for ${file}`);
         editorRef.current.dispose();
         editorRef.current = null;
       }
     };
   }, [file, language, fileContents[file]]); // Recreate when file, language, or file contents change
-
-  // Debug effect to track editor recreation
-  useEffect(() => {
-    console.log(`Editor recreation triggered for ${file}:`, {
-      file,
-      language,
-      hasContent: fileContents[file] !== undefined,
-      contentLength: fileContents[file]?.length || 0
-    });
-  }, [file, language, fileContents[file]]);
-
-  // No separate content update effect needed - editor is recreated when fileContents change
-
-  // Debug effect to log file contents changes
-  useEffect(() => {
-    console.log(`File contents changed for ${file}:`, {
-      hasContent: fileContents[file] !== undefined,
-      contentLength: fileContents[file]?.length || 0,
-      contentPreview: fileContents[file]?.substring(0, 50) || 'undefined',
-      hasEditor: !!editorRef.current,
-      isInitializing: isInitializingRef.current
-    });
-  }, [fileContents[file], file]);
 
   // Note: readOnly state is now handled in the main editor creation effect
   // since we recreate the editor when selection changes
@@ -394,7 +354,6 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
   useEffect(() => {
     return () => {
       if (editorRef.current) {
-        console.log(`Component cleanup: disposing Monaco editor for ${file}`);
         editorRef.current.dispose();
         editorRef.current = null;
       }
@@ -407,6 +366,8 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
 
   const displayTitle = title || `${file} (${language})`;
   const isContentLoaded = fileContents[file] !== undefined;
+  
+
 
   return (
     <NodeViewWrapper>
@@ -426,37 +387,83 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
         role="button"
         aria-label={`Click to edit ${displayTitle}`}
       >
-                <div className={`
-          px-3 py-2 border-b border-gray-300 text-sm font-bold
-          flex justify-between items-center transition-colors duration-200 ease-in-out
-          ${isSelected 
-            ? 'bg-blue-50 text-gray-800' 
-            : 'bg-gray-100 text-gray-700'
-          }
-        `}>
-          <span>{displayTitle}</span>
-          <div className="flex items-center gap-2">
-            {isSelected ? (
-              <>
-                <span className="text-xs text-blue-500 font-normal">
-                  Editing
-                </span>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleSave();
-                  }}
-                  className="bg-blue-500 hover:bg-blue-600 text-white border-none rounded px-2 py-1 text-xs cursor-pointer font-bold transition-colors duration-200"
-                >
-                  Save
-                </button>
-              </>
-            ) : (
-              <span className="text-xs text-gray-500 font-normal">
-                Click to edit
-              </span>
+                        <div 
+          className={`
+            px-3 py-2 border-b border-gray-300 text-sm font-bold
+            flex justify-between items-center transition-colors duration-200 ease-in-out
+            ${isSelected 
+              ? 'bg-blue-50 text-gray-800' 
+              : 'bg-gray-100 text-gray-700'
+            }
+          `}
+          style={{
+            padding: '0.75rem 1rem',
+            borderBottom: '1px solid #d1d5db',
+            fontSize: '0.875rem',
+            fontWeight: 'bold',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            transition: 'colors 0.2s ease-in-out',
+            backgroundColor: isSelected ? '#eff6ff' : '#f3f4f6',
+            color: isSelected ? '#1f2937' : '#374151',
+            position: 'relative'
+          }}
+        >
+          <div className="flex flex-row" style={{ display: 'flex', flexDirection: 'row' }}>
+            <span>{displayTitle}</span>
+            <span 
+              className="text-xs text-gray-500 font-normal"
+              style={{ 
+                fontSize: '0.75rem', 
+                color: '#6b7280', 
+                fontWeight: 'normal',
+                marginLeft: '0.25rem'
+              }}
+            >
+              &nbsp;- {file}
+            </span>
+          </div>
+          <div className="flex items-center gap-2" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            {currentUnsavedChanges !== undefined && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSave();
+                }}
+                className="bg-blue-500 hover:bg-blue-600 text-white border-none rounded px-2 py-1 text-xs cursor-pointer font-bold transition-colors duration-200"
+                style={{
+                  backgroundColor: '#3b82f6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '0.25rem',
+                  padding: '0.25rem 0.5rem',
+                  fontSize: '0.75rem',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  transition: 'background-color 0.2s'
+                }}
+              >
+                Save
+              </button>
             )}
           </div>
+          {/* Status dot in top right */}
+          <div 
+            style={{
+              position: 'absolute',
+              top: '0.5rem',
+              right: '0.5rem',
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              backgroundColor: currentUnsavedChanges !== undefined ? '#f97316' : '#10b981', // Orange for unsaved, green for saved
+              border: '1px solid white',
+              boxShadow: '0 0 0 1px rgba(0,0,0,0.1)'
+            }}
+            title={`Status: ${currentUnsavedChanges !== undefined ? 'Unsaved changes' : 'Saved'}`}
+          />
+          {/* Debug logging for status dot */}
         </div>
         <div 
           ref={containerRef}
@@ -472,7 +479,10 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
   );
 };
 
-// Simple Monaco Block Extension
+/**
+ * Monaco Block Extension - Defines a custom TipTap node for Monaco editors
+ * Handles the creation and rendering of Monaco editor blocks within the document
+ */
 const MonacoBlock = Node.create({
   name: 'monacoBlock',
   group: 'block',
@@ -511,7 +521,10 @@ const MonacoBlock = Node.create({
   },
 });
 
-// Slash Commands Extension using TipTap's suggestion system
+/**
+ * Slash Commands Extension - Provides slash command functionality
+ * Uses TipTap's suggestion system to show command menu when typing '/'
+ */
 const SlashCommands = Extension.create({
   name: 'slashCommands',
 
@@ -672,13 +685,19 @@ const SlashCommands = Extension.create({
 
 
 
+/**
+ * Main Editor Component - Renders the TipTap editor with Monaco blocks
+ * Handles view switching, content loading, and save functionality
+ */
 const Editor = () => {
-  const { activeView, views, fileContents, setFileContents, markFileAsDirty } = useStore();
+  const { activeView, views, fileContents, unsavedChanges, saveAllFiles } = useStore();
   const currentViewRef = useRef<string | null>(null);
 
   const currentView = views.find(view => view.title === activeView);
 
-  // Get language from file extension
+  /**
+   * Get Monaco language identifier from file extension
+   */
   const getLanguageFromFile = (filename: string): string => {
     const ext = filename.split('.').pop()?.toLowerCase();
     switch (ext) {
@@ -726,7 +745,9 @@ const Editor = () => {
     }
   };
 
-  // Configure Monaco for test files
+  /**
+   * Configure Monaco editor for test files with Jest globals
+   */
   const configureMonacoForTestFiles = () => {
     monaco.languages.typescript.typescriptDefaults.addExtraLib(`
       declare global {
@@ -755,7 +776,7 @@ const Editor = () => {
     });
   };
 
-  // TipTap editor configuration
+  // TipTap editor configuration with Monaco blocks and slash commands
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -784,7 +805,7 @@ const Editor = () => {
     },
   });
 
-  // Initialize content when view changes
+  // Initialize content when view changes or file contents update
   useEffect(() => {
     if (currentView && currentView.title !== currentViewRef.current) {
       currentViewRef.current = currentView.title;
@@ -887,7 +908,17 @@ const Editor = () => {
   return (
     <div className="h-full flex flex-col">
       <div className="p-5 border-b border-gray-200 bg-white">
-        <h2 className="text-2xl font-bold text-gray-900">{currentView.title}</h2>
+        <div className="flex justify-between items-center">
+          <h2 className="text-2xl font-bold text-gray-900">{currentView.title}</h2>
+          {Object.keys(unsavedChanges).length > 0 && (
+            <button
+              onClick={saveAllFiles}
+              className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md font-medium transition-colors duration-200"
+            >
+              Save All ({Object.keys(unsavedChanges).length} files)
+            </button>
+          )}
+        </div>
       </div>
       <div className="flex-1 overflow-y-auto relative">
         <div className="p-5">
