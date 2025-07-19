@@ -1,49 +1,155 @@
-# FileStack - An `org-mode` Inspired Prototype
+# Filestack - Monaco Editor Integration
 
-FileStack is a standalone desktop application built with Electron to prototype a novel, domain-driven workflow inspired by Emacs' `org-mode`. The goal is to create a functional proof-of-concept demonstrating a "stacked" file view, where multiple files can be managed as a single, cohesive unit.
+A modern Electron application that integrates Monaco editor with TipTap rich text editor, providing a powerful code editing experience within a document-based interface.
 
-This project serves as a living specification for a potential future VS Code extension.
+## 🚀 Features
 
----
+- **Monaco Editor Integration**: Full-featured code editing with syntax highlighting and IntelliSense
+- **TipTap Rich Text Editor**: Modern, extensible rich text editing
+- **Explicit Save System**: Unsaved changes tracking with visual indicators
+- **Slash Commands**: Quick insertion of content blocks with `/` commands
+- **Multi-file Support**: Edit multiple files within a single document
+- **TypeScript Support**: Full TypeScript support with proper type definitions
 
-## Key Features
+## 📁 Project Structure
 
-- **Stacked File Views**: Define sets of related files in a `filestack.json` configuration. Each set, or "view," is rendered as a single, scrollable document in the editor.
-- **Vim Keybindings**: The editor provides Vim keybindings for efficient, keyboard-driven navigation and editing.
-- **Workspace-Aware**: Open any directory as a workspace, and FileStack will automatically detect and load its configuration.
-- **Content Folding**: Collapse and expand individual file sections within a view to focus on the task at hand.
-- **Modern Tooling**: Built with TypeScript, Vite for hot-reloading, and Zod for robust configuration validation.
+```
+filestack/
+├── src/
+│   ├── components/           # Shared UI components
+│   │   ├── SlashCommand.tsx  # Slash command menu component
+│   │   └── ui/              # Reusable UI components
+│   ├── renderer/            # Main editor functionality
+│   │   ├── components/      # Editor-specific components
+│   │   │   ├── EditorHeader/     # Header with title and save button
+│   │   │   ├── EditorContent/    # Main editor content wrapper
+│   │   │   ├── EditorPlaceholder/# Placeholder when no view selected
+│   │   │   └── MonacoBlock/      # Monaco editor block component
+│   │   ├── extensions/      # TipTap extensions
+│   │   │   ├── MonacoBlock.ts    # Monaco block node extension
+│   │   │   └── SlashCommands.tsx # Slash command functionality
+│   │   ├── hooks/           # Custom React hooks
+│   │   │   └── useTipTapEditor.ts# TipTap editor configuration
+│   │   ├── utils/           # Utility functions
+│   │   │   ├── monaco.ts         # Monaco editor utilities
+│   │   │   └── contentBuilder.ts # Content building utilities
+│   │   ├── store.ts         # Global state management
+│   │   ├── Editor.tsx       # Main editor component
+│   │   └── README.md        # Detailed renderer documentation
+│   ├── shared/              # Shared types and utilities
+│   │   └── types.ts         # TypeScript type definitions
+│   └── main.ts              # Electron main process
+├── examples/                # Example configurations
+└── README.md               # This file
+```
 
----
+## 🧩 Key Components
 
-## Architecture
+### MonacoBlock Component
+The heart of the application - integrates Monaco editor within TipTap blocks:
+- **File Editing**: Full Monaco editor functionality for code files
+- **Unsaved Changes**: Tracks changes with visual indicators (orange dot = unsaved, green = saved)
+- **Save System**: Explicit save buttons per block and "Save All" functionality
+- **Focus Management**: Seamless integration between TipTap and Monaco selection
 
-- **Electron**: Provides the cross-platform application shell.
-- **TypeScript**: Ensures the entire codebase is type-safe and maintainable.
-- **Vite**: Powers the development environment with a fast build process and hot module replacement (HMR).
-- **Zod**: Used in the main process to parse and validate the `filestack.json` configuration, ensuring data integrity and providing clear error messages.
-- **Zustand**: A minimal, fast state management library used in the renderer process to manage UI state, such as the active workspace, the list of views, and the content of the editor.
+### TipTap Extensions
+- **MonacoBlock**: Custom node for Monaco editor blocks
+- **SlashCommands**: Slash command system for quick content insertion
 
----
+### State Management
+- **Zustand Store**: Global state for views, file contents, and unsaved changes
+- **Explicit Saving**: Changes are tracked separately until explicitly saved
 
-## Getting Started (Development)
+## 🚀 Getting Started
 
-To get the application running locally:
+### Prerequisites
+- Node.js 16+
+- npm or yarn
 
-1.  **Clone the repository:**
-    ```bash
-    git clone <repository-url>
-    cd filestack
-    ```
+### Installation
+```bash
+npm install
+```
 
-2.  **Install dependencies:**
-    ```bash
-    npm install
-    ```
+### Development
+```bash
+npm run dev
+```
 
-3.  **Run the development server:**
-    ```bash
-    npm start
-    ```
+### Building
+```bash
+npm run build
+```
 
-This will launch the application in development mode with hot reloading enabled. Any changes made to the source code will be reflected instantly. 
+## 🎯 Key Concepts
+
+### Monaco Editor Integration
+- **Models**: File content representation, shared between editors
+- **Lifecycle**: Creation, focus, content changes, disposal
+- **Selection Sync**: Keeps TipTap and Monaco selection synchronized
+
+### TipTap Integration
+- **NodeViewProps**: Props provided to custom node components
+- **Extensions**: Custom functionality added to TipTap
+- **Commands**: Actions performed on the editor
+
+### State Management
+- **Unsaved Changes**: Stored separately from saved content
+- **Explicit Saving**: User must click save to persist changes
+- **Bulk Operations**: Save all files at once
+
+## 🔧 Development
+
+### Adding New File Types
+1. Update `getLanguageFromFile()` in `src/renderer/utils/monaco.ts`
+2. Test with a file of that type
+
+### Adding New Slash Commands
+1. Update the commands array in `src/renderer/extensions/SlashCommands.tsx`
+2. Test the command functionality
+
+### Modifying Monaco Block Behavior
+1. Update `src/renderer/components/MonacoBlock/MonacoBlock.tsx`
+2. Update `src/renderer/extensions/MonacoBlock.ts` if needed
+3. Test focus, selection, and save functionality
+
+### Adding New Content Types
+1. Update `src/renderer/utils/contentBuilder.ts` to handle the new type
+2. Update the View type in `src/shared/types.ts` if needed
+3. Test content building and rendering
+
+## 📝 Code Quality
+
+### Modular Architecture
+- **Single Responsibility**: Each component/function has one clear purpose
+- **Clear Separation**: Components, extensions, utilities, and hooks are well-separated
+- **Easy Navigation**: Logical folder structure makes code easy to find
+
+### Documentation
+- **JSDoc Comments**: Complex concepts are explained in detail
+- **README Files**: Comprehensive documentation for each module
+- **Type Safety**: Full TypeScript support throughout
+
+### Best Practices
+- **Clean Imports**: Index files provide clean import paths
+- **Consistent Naming**: Descriptive names that explain functionality
+- **Error Handling**: Proper error handling and user feedback
+
+## 🤝 Contributing
+
+1. **Fork the repository**
+2. **Create a feature branch**: `git checkout -b feature/amazing-feature`
+3. **Make your changes**: Follow the modular structure and documentation
+4. **Test thoroughly**: Ensure all functionality works as expected
+5. **Submit a pull request**: Include clear description of changes
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## 🙏 Acknowledgments
+
+- **Monaco Editor**: Microsoft's powerful code editor
+- **TipTap**: Modern rich text editor framework
+- **Electron**: Cross-platform desktop app framework
+- **Zustand**: Lightweight state management 
