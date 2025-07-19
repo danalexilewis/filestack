@@ -23,6 +23,12 @@ const App: React.FC = () => {
       console.log('First view files:', loadedViews[0]?.files);
       console.log('All views:', JSON.stringify(loadedViews, null, 2));
       setViews(loadedViews);
+      
+      // Set the first view as active if no view is currently active
+      if (loadedViews.length > 0 && !activeView) {
+        console.log('Setting first view as active:', loadedViews[0].title);
+        setActiveView(loadedViews[0].title);
+      }
     });
     // This is a new event that I will add to the preload script
     window.electron.onWorkspaceOpened((path: string) => {
@@ -32,17 +38,22 @@ const App: React.FC = () => {
     window.electron.onConfigError((errorMessage: string) => {
       console.error('Config error:', errorMessage);
     });
-  }, [setViews, setWorkspacePath]);
+  }, [setViews, setWorkspacePath, setActiveView, activeView]);
 
   // Load file contents when active view changes
   useEffect(() => {
     if (activeView && workspacePath) {
       const currentView = views.find(view => view.title === activeView);
       if (currentView) {
+        console.log(`Loading file contents for view: ${activeView}`, currentView.files);
         window.electron.getWorkspaceFileContents(currentView.files).then((contents) => {
+          console.log('File contents loaded:', Object.keys(contents));
           Object.entries(contents).forEach(([file, content]) => {
+            console.log(`Setting content for ${file}, length: ${content.length}`);
             setFileContents(file, content);
           });
+        }).catch((error) => {
+          console.error('Error loading file contents:', error);
         });
       }
     }

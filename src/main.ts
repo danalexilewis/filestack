@@ -145,19 +145,28 @@ ipcMain.on('open-workspace', async (event) => {
 
 ipcMain.handle('get-workspace-file-contents', async (_event, files: string[]) => {
   if (!workspacePath) {
+    console.log('No workspace path set');
     return {};
   }
+
+  console.log(`Loading files from workspace: ${workspacePath}`);
+  console.log(`Files requested:`, files);
 
   const fileContents: Record<string, string> = {};
   for (const file of files) {
     try {
       const filePath = path.join(workspacePath, file);
-      fileContents[file] = await fs.readFile(filePath, 'utf-8');
+      console.log(`Reading file: ${filePath}`);
+      const content = await fs.readFile(filePath, 'utf-8');
+      console.log(`File ${file} loaded, length: ${content.length}`);
+      fileContents[file] = content;
     } catch (error) {
       console.error(`Error reading file ${file}:`, error);
       fileContents[file] = `Error reading file: ${error.message}`;
     }
   }
+  
+  console.log(`Returning file contents for:`, Object.keys(fileContents));
   return fileContents;
 });
 

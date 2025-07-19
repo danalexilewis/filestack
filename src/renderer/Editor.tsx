@@ -91,7 +91,13 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
       return;
     }
 
-    console.log('Creating Monaco editor for:', file, 'selected:', isSelected);
+    // Wait for file contents to be available
+    if (fileContents[file] === undefined) {
+      console.log(`Waiting for file contents to load for ${file}`);
+      return;
+    }
+
+    console.log('Creating Monaco editor for:', file, 'selected:', isSelected, 'content length:', fileContents[file]?.length || 0);
     
     // Use requestAnimationFrame to ensure DOM is ready
     const frameId = requestAnimationFrame(() => {
@@ -126,7 +132,7 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
           lineNumbersMinChars: 3,
         });
 
-        console.log('Monaco editor created successfully for:', file, 'readOnly:', !isSelected);
+        console.log('Monaco editor created successfully for:', file, 'readOnly:', !isSelected, 'with content length:', fileContents[file]?.length || 0);
 
         // Track changes and update store
         const changeDisposable = monacoEditor.onDidChangeModelContent(() => {
@@ -196,6 +202,15 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
     }
   }, [fileContents, file]);
 
+  // Debug effect to log file contents changes
+  useEffect(() => {
+    console.log(`File contents changed for ${file}:`, {
+      hasContent: fileContents[file] !== undefined,
+      contentLength: fileContents[file]?.length || 0,
+      contentPreview: fileContents[file]?.substring(0, 50) || 'undefined'
+    });
+  }, [fileContents[file], file]);
+
   // Update readOnly state when selection changes
   useEffect(() => {
     if (editorRef.current) {
@@ -209,6 +224,7 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
   }
 
   const displayTitle = title || `${file} (${language})`;
+  const isContentLoaded = fileContents[file] !== undefined;
 
   return (
     <NodeViewWrapper>
@@ -280,7 +296,25 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
             width: '100%'
           }}
         />
-        {!isSelected && (
+        {!isContentLoaded && (
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.1)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#666',
+            fontSize: '14px',
+            pointerEvents: 'none'
+          }}>
+            Loading file content...
+          </div>
+        )}
+        {isContentLoaded && !isSelected && (
           <div style={{
             position: 'absolute',
             top: 0,
