@@ -366,19 +366,14 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
   return (
     <NodeViewWrapper>
       <div 
-        style={{
-          minHeight: '200px',
-          width: '100%',
-          border: isSelected ? '2px solid #007acc' : '2px solid #ccc',
-          marginTop: '10px',
-          marginBottom: '10px',
-          borderRadius: '4px',
-          overflow: 'hidden',
-          background: '#1e1e1e',
-          cursor: isSelected ? 'text' : 'pointer',
-          transition: 'border-color 0.2s ease',
-          position: 'relative'
-        }}
+        className={`
+          min-h-[200px] w-full my-2.5 rounded overflow-hidden relative
+          border-2 transition-colors duration-200 ease-in-out
+          ${isSelected 
+            ? 'border-blue-500 bg-gray-900 cursor-text' 
+            : 'border-gray-300 bg-gray-900 cursor-pointer hover:border-gray-400'
+          }
+        `}
         onClick={handleClick}
         onKeyDown={handleKeyDown}
         // Scroll events are handled directly by Monaco editor listeners
@@ -386,70 +381,44 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
         role="button"
         aria-label={`Click to edit ${displayTitle}`}
       >
-        <div style={{
-          padding: '8px 12px',
-          background: isSelected ? '#e3f2fd' : '#f5f5f5',
-          borderBottom: '1px solid #ccc',
-          fontSize: '14px',
-          fontWeight: 'bold',
-          color: '#333',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          transition: 'background-color 0.2s ease'
-        }}>
+                <div className={`
+          px-3 py-2 border-b border-gray-300 text-sm font-bold
+          flex justify-between items-center transition-colors duration-200 ease-in-out
+          ${isSelected 
+            ? 'bg-blue-50 text-gray-800' 
+            : 'bg-gray-100 text-gray-700'
+          }
+        `}>
           <span>{displayTitle}</span>
-          {isSelected && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '12px', color: '#007acc', fontWeight: 'normal' }}>
-                Editing
+          <div className="flex items-center gap-2">
+            {isSelected ? (
+              <>
+                <span className="text-xs text-blue-500 font-normal">
+                  Editing
+                </span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSave();
+                  }}
+                  className="bg-blue-500 hover:bg-blue-600 text-white border-none rounded px-2 py-1 text-xs cursor-pointer font-bold transition-colors duration-200"
+                >
+                  Save
+                </button>
+              </>
+            ) : (
+              <span className="text-xs text-gray-500 font-normal">
+                Click to edit
               </span>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleSave();
-                }}
-                style={{
-                  background: '#007acc',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  padding: '4px 8px',
-                  fontSize: '12px',
-                  cursor: 'pointer',
-                  fontWeight: 'bold'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = '#005a9e'}
-                onMouseLeave={(e) => e.currentTarget.style.background = '#007acc'}
-              >
-                Save
-              </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
         <div 
           ref={containerRef}
-          style={{
-            minHeight: '200px',
-            width: '100%',
-            transition: 'height 0.2s ease'
-          }}
+          className="min-h-[200px] w-full transition-height duration-200 ease-in-out"
         />
         {!isContentLoaded && (
-          <div style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0,0,0,0.1)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#666',
-            fontSize: '14px',
-            pointerEvents: 'none'
-          }}>
+          <div className="absolute inset-0 bg-black/10 flex items-center justify-center text-gray-500 text-sm pointer-events-none">
             Loading file content...
           </div>
         )}
@@ -774,23 +743,22 @@ const Editor = () => {
 
   if (!activeView || !currentView) {
     return (
-      <div style={{ padding: '20px' }}>
-        <h2>Select a view from the sidebar to start editing</h2>
+      <div className="p-5">
+        <h2 className="text-xl font-semibold text-gray-800">Select a view from the sidebar to start editing</h2>
       </div>
     );
   }
 
   return (
-    <div style={{ padding: '20px', position: 'relative' }}>
-      <div style={{ marginBottom: '20px' }}>
-        <h2>{currentView.title}</h2>
-        <div style={{
-          border: '1px solid #ccc',
-          borderRadius: '4px',
-          minHeight: '400px',
-          padding: '20px'
-        }}>
-          <EditorContent editor={editor} />
+    <div className="h-full flex flex-col">
+      <div className="p-5 border-b border-gray-200 bg-white">
+        <h2 className="text-2xl font-bold text-gray-900">{currentView.title}</h2>
+      </div>
+      <div className="flex-1 overflow-y-auto">
+        <div className="p-5">
+          <div className="border border-gray-300 rounded-lg bg-white shadow-sm">
+            <EditorContent editor={editor} />
+          </div>
         </div>
       </div>
 
@@ -798,21 +766,13 @@ const Editor = () => {
       {showSlashMenu && (
         <div
           ref={slashMenuRef}
+          className="fixed bg-white border border-gray-300 rounded-lg shadow-lg z-50 min-w-[200px] max-h-[300px] overflow-auto"
           style={{
-            position: 'absolute',
             left: slashPosition.x,
             top: slashPosition.y,
-            background: 'white',
-            border: '1px solid #ccc',
-            borderRadius: '4px',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-            zIndex: 1000,
-            minWidth: '200px',
-            maxHeight: '300px',
-            overflow: 'auto'
           }}
         >
-          <div style={{ padding: '8px 12px', fontWeight: 'bold', borderBottom: '1px solid #eee' }}>
+          <div className="px-3 py-2 font-bold border-b border-gray-200 bg-gray-50">
             Commands
           </div>
           {[
@@ -825,16 +785,10 @@ const Editor = () => {
             <div
               key={cmd.key}
               onClick={() => handleSlashCommand(cmd.key)}
-              style={{
-                padding: '8px 12px',
-                cursor: 'pointer',
-                borderBottom: '1px solid #f0f0f0'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.background = '#f5f5f5'}
-              onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
+              className="px-3 py-2 cursor-pointer border-b border-gray-100 hover:bg-gray-50 transition-colors duration-150 last:border-b-0"
             >
-              <div style={{ fontWeight: 'bold' }}>{cmd.label}</div>
-              <div style={{ fontSize: '12px', color: '#666' }}>{cmd.desc}</div>
+              <div className="font-semibold text-gray-900">{cmd.label}</div>
+              <div className="text-xs text-gray-600">{cmd.desc}</div>
             </div>
           ))}
         </div>
