@@ -24,8 +24,7 @@ export const ContentItemSchema = z.union([
 
 export const ViewSchema = z.object({
   title: z.string(),
-  files: z.array(z.string()),
-  content: z.array(ContentItemSchema).optional(),
+  path: z.string(),
 });
 
 export const ConfigSchema = z.object({

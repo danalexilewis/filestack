@@ -31,6 +31,7 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({
   selected,       // Whether this node is currently selected in TipTap
   updateAttributes // Function to update node attributes
 }) => {
+
   // ============================================================================
   // STATE AND REFS
   // ============================================================================
@@ -58,6 +59,11 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({
   // Get current unsaved changes for this specific file
   const currentUnsavedChanges = unsavedChanges[file];
   
+  // Get current file contents from store for debugging
+  const fileContent = fileContents[file];
+  
+
+  
   // TipTap selection state (whether this block is selected)
   const isSelected = selected;
   
@@ -68,12 +74,18 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({
   /**
    * Handle save button click
    * 
-   * When user clicks "Save", we move the unsaved changes to the saved file contents.
-   * This simulates writing the file to disk.
+   * When user clicks "Save", we save the unsaved changes to disk and update the store.
    */
-  const handleSave = () => {
+  const handleSave = async () => {
     if (editorRef.current) {
-      saveFile(file);
+      try {
+        const success = await saveFile(file);
+        if (!success) {
+          console.error(`Failed to save file: ${file}`);
+        }
+      } catch (error) {
+        console.error(`Error saving file ${file}:`, error);
+      }
     }
   };
   
@@ -116,6 +128,11 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({
       if (editor) {
         editor.commands.blur();
       }
+    }
+    // Handle Ctrl+S to save
+    else if (event.key === 's' && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      handleSave();
     }
   };
   
@@ -243,8 +260,8 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({
         if (model) {
           // Model exists - update its content if needed
           const currentValue = model.getValue();
-          if (currentValue !== currentContent) {
-            model.setValue(currentContent || '');
+          if (currentValue !== fileContent) {
+            model.setValue(fileContent || '');
           }
           
           // Check if model is already attached to other editors (this is fine)
@@ -253,7 +270,7 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({
         } else {
           // Create new model with file content
           model = monaco.editor.createModel(
-            currentContent || '',
+            fileContent || '',
             language,
             modelUri
           );
@@ -288,6 +305,20 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({
         
         // Set initial read-only state
         monacoEditor.updateOptions({ readOnly: !isSelected });
+        
+        // ============================================================================
+        // KEYBOARD SHORTCUTS
+        // ============================================================================
+        // Add Ctrl+S (or Cmd+S on Mac) to save the file
+        
+        const keyDownDisposable = monacoEditor.onKeyDown((e) => {
+          // Check for Ctrl+S (Windows/Linux) or Cmd+S (Mac)
+          if ((e.ctrlKey || e.metaKey) && e.code === 'KeyS') {
+            e.preventDefault();
+            e.stopPropagation();
+            handleSave();
+          }
+        });
         
         // ============================================================================
         // DYNAMIC HEIGHT ADJUSTMENT
@@ -414,6 +445,7 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({
           blurDisposable.dispose();
           contentChangeDisposable.dispose();
           scrollDisposable.dispose();
+          keyDownDisposable.dispose();
           
           // Remove wheel event listeners
           const monacoDomElement = monacoEditor.getDomNode();

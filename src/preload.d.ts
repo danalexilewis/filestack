@@ -5,6 +5,8 @@ export interface IElectronAPI {
   onConfigLoaded: (callback: (views: any[]) => void) => void;
   onConfigError: (callback: (errorMessage: string) => void) => void;
   onWorkspaceOpened: (callback: (path: string) => void) => void;
+  loadContentFile: (contentFile: string) => Promise<string | null>;
+  saveContentFile: (contentFile: string, content: string) => Promise<boolean>;
 }
 
 declare global {

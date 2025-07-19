@@ -8,4 +8,12 @@ export default defineConfig({
     react(),
     monacoEditorPlugin({}),
   ],
+  server: {
+    watch: {
+      ignored: [
+        'examples/**',
+        '**/examples/**'
+      ]
+    }
+  }
 });

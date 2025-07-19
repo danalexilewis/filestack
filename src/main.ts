@@ -186,6 +186,44 @@ ipcMain.handle('save-files', async (_event, filesToSave: Record<string, string>)
   }
 });
 
+// Handle loading Markdown content files
+ipcMain.handle('load-content-file', async (_event, contentFile: string) => {
+  if (!workspacePath) {
+    console.log('No workspace path set');
+    return null;
+  }
+
+  try {
+    const filePath = path.join(workspacePath, contentFile);
+    console.log(`Loading content file: ${filePath}`);
+    const content = await fs.readFile(filePath, 'utf-8');
+    console.log(`Content file loaded, length: ${content.length}`);
+    return content;
+  } catch (error) {
+    console.error(`Error reading content file ${contentFile}:`, error);
+    return null;
+  }
+});
+
+// Handle saving Markdown content files
+ipcMain.handle('save-content-file', async (_event, contentFile: string, content: string) => {
+  if (!workspacePath) {
+    console.log('No workspace path set');
+    return false;
+  }
+
+  try {
+    const filePath = path.join(workspacePath, contentFile);
+    console.log(`Saving content file: ${filePath}`);
+    await fs.writeFile(filePath, content, 'utf-8');
+    console.log(`Content file saved successfully`);
+    return true;
+  } catch (error) {
+    console.error(`Error writing content file ${contentFile}:`, error);
+    return false;
+  }
+});
+
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits
 // explicitly with Cmd + Q.

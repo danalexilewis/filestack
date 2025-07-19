@@ -14,8 +14,8 @@ interface AppState {
   setFileContents: (file: string, contents: string) => void;
   setUnsavedChanges: (file: string, contents: string) => void;
   clearUnsavedChanges: (file: string) => void;
-  saveFile: (file: string) => void;
-  saveAllFiles: () => void;
+  saveFile: (file: string) => Promise<boolean>;
+  saveAllFiles: () => Promise<boolean>;
   markFileAsDirty: (file: string) => void;
   unmarkFileAsDirty: (file: string) => void;
 }
@@ -54,37 +54,81 @@ export const useStore = create<AppState>((set, get) => ({
         dirtyFiles: state.dirtyFiles.filter((f) => f !== file),
       };
     }),
-  saveFile: (file) => {
+  saveFile: async (file) => {
     const state = get();
     const unsavedContent = state.unsavedChanges[file];
+    
     if (unsavedContent) {
-      set((state) => ({
-        fileContents: {
-          ...state.fileContents,
-          [file]: unsavedContent,
-        },
-        unsavedChanges: {
-          ...state.unsavedChanges,
-          [file]: undefined,
-        },
-        dirtyFiles: state.dirtyFiles.filter((f) => f !== file),
-      }));
-      console.log(`Saved file: ${file}`);
+      try {
+        // Save to disk using Electron IPC
+        if ((window as any).electron) {
+          const success = await (window as any).electron.saveContentFile(file, unsavedContent);
+          if (!success) {
+            console.error(`Failed to save file to disk: ${file}`);
+            return false;
+          }
+        } else {
+          console.warn(`Electron API not available, saving to store only: ${file}`);
+        }
+        
+        // Update store
+        set((state) => ({
+          fileContents: {
+            ...state.fileContents,
+            [file]: unsavedContent,
+          },
+          unsavedChanges: {
+            ...state.unsavedChanges,
+            [file]: undefined,
+          },
+          dirtyFiles: state.dirtyFiles.filter((f) => f !== file),
+        }));
+        return true;
+      } catch (error) {
+        console.error(`Error saving file ${file}:`, error);
+        return false;
+      }
+    } else {
+      return true;
     }
   },
-  saveAllFiles: () => {
+  saveAllFiles: async () => {
     const state = get();
     const filesToSave = Object.keys(state.unsavedChanges);
     if (filesToSave.length > 0) {
-      set((state) => ({
-        fileContents: {
-          ...state.fileContents,
-          ...state.unsavedChanges,
-        },
-        unsavedChanges: {},
-        dirtyFiles: [],
-      }));
-      console.log(`Saved all files: ${filesToSave.join(', ')}`);
+      try {
+        // Save all files to disk
+        if ((window as any).electron) {
+          for (const file of filesToSave) {
+            const unsavedContent = state.unsavedChanges[file];
+            if (unsavedContent) {
+              const success = await (window as any).electron.saveContentFile(file, unsavedContent);
+              if (!success) {
+                console.error(`Failed to save file to disk: ${file}`);
+                return false;
+              }
+            }
+          }
+        } else {
+          console.warn(`Electron API not available, saving to store only`);
+        }
+        
+        // Update store
+        set((state) => ({
+          fileContents: {
+            ...state.fileContents,
+            ...state.unsavedChanges,
+          },
+          unsavedChanges: {},
+          dirtyFiles: [],
+        }));
+        return true;
+      } catch (error) {
+        console.error(`Error saving all files:`, error);
+        return false;
+      }
+    } else {
+      return true;
     }
   },
   markFileAsDirty: (file) =>

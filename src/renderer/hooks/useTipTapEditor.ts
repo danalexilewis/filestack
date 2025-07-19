@@ -43,8 +43,7 @@ export const useTipTapEditor = () => {
     
     // Handle content updates
     onUpdate: ({ editor }) => {
-      const content = editor.getHTML();
-      console.log('Content updated:', content);
+      // Content updates are handled by individual components
     },
     
     // Editor styling

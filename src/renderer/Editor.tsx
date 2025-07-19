@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { useStore } from './store';
 import { configureMonacoForTestFiles } from './utils/monaco';
-import { buildContentFromView, buildFallbackContent } from './utils/contentBuilder';
+import { loadViewContent } from './utils/contentLoader';
 import { useTipTapEditor } from './hooks/useTipTapEditor';
 import EditorHeader from './components/EditorHeader/EditorHeader';
 import EditorContent from './components/EditorContent/EditorContent';
@@ -27,7 +27,8 @@ const Editor = () => {
     views,           // All available views
     fileContents,    // Saved file contents
     unsavedChanges,  // Unsaved changes
-    saveAllFiles     // Function to save all files
+    saveAllFiles,    // Function to save all files
+    workspacePath    // Current workspace path
   } = useStore();
   
   // Track the current view to detect changes
@@ -47,21 +48,24 @@ const Editor = () => {
   // EFFECTS
   // ============================================================================
   
+
+  
   // Initialize content when view changes or file contents update
   useEffect(() => {
     if (currentView && currentView.title !== currentViewRef.current) {
       currentViewRef.current = currentView.title;
       
-      if (editor) {
-        if (currentView.content) {
-          // Build content from the view's content definition
-          const contentArray = buildContentFromView(currentView);
+            if (editor) {
+        // Load content from Markdown file or generate fallback
+        const workspace = workspacePath || '/workspace';
+        
+        loadViewContent(currentView, workspace).then((contentArray) => {
           editor.commands.setContent(contentArray);
-        } else {
-          // Fallback: create content from file list
-          const contentArray = buildFallbackContent(currentView);
-          editor.commands.setContent(contentArray);
-        }
+        }).catch((error) => {
+          console.error('Failed to load view content:', error);
+          // Set empty content as fallback
+          editor.commands.setContent([]);
+        });
       }
     }
   }, [currentView, fileContents, editor]);
