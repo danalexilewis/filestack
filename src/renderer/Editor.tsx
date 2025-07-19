@@ -5,7 +5,10 @@ import { useEditor, EditorContent, NodeViewWrapper, NodeViewProps, ReactNodeView
 import StarterKit from '@tiptap/starter-kit';
 import CodeBlock from '@tiptap/extension-code-block';
 import Placeholder from '@tiptap/extension-placeholder';
-import { Node, mergeAttributes } from '@tiptap/core';
+import { Node, mergeAttributes, Extension } from '@tiptap/core';
+import { Suggestion } from '@tiptap/suggestion';
+import { createRoot } from 'react-dom/client';
+import { SlashCommand } from '../components/SlashCommand';
 
 // Simple Monaco Block React Component
 const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, selected, updateAttributes }) => {
@@ -466,35 +469,172 @@ const MonacoBlock = Node.create({
   },
 });
 
+// Slash Commands Extension using TipTap's suggestion system
+const SlashCommands = Extension.create({
+  name: 'slashCommands',
+
+  addProseMirrorPlugins() {
+    return [
+      Suggestion({
+        editor: this.editor,
+        char: '/',
+        startOfLine: true,
+        command: ({ editor, range, props }) => {
+          console.log('Command executed with props:', props)
+          // Delete the trigger character and replace with the selected command
+          editor
+            .chain()
+            .focus()
+            .deleteRange(range)
+            .insertContent(props.command)
+            .run()
+        },
+        items: ({ query }) => {
+          const commands = [
+            { title: 'Heading', command: '<h1>Heading</h1>' },
+            { title: 'Subheading', command: '<h2>Subheading</h2>' },
+            { title: 'Bullet List', command: '<ul><li>List item</li></ul>' },
+            { title: 'Code Block', command: '<pre><code>Code block</code></pre>' },
+            { title: 'Monaco Editor', command: 'monaco' },
+          ]
+          
+          if (query) {
+            return commands.filter(item => 
+              item.title.toLowerCase().includes(query.toLowerCase())
+            )
+          }
+          
+          return commands
+        },
+        render: () => {
+          let popup: any
+          let selectedIndex = 0
+          let root: any
+
+          return {
+            onStart: (props) => {
+              console.log('Slash command onStart called with props:', props)
+              
+              popup = document.createElement('div')
+              popup.className = 'slash-command-popup'
+              
+              // Calculate position based on the cursor position
+              const { range } = props
+              const coords = props.editor.view.coordsAtPos(range.from)
+              
+              popup.style.cssText = `
+                position: fixed;
+                z-index: 9999;
+                left: ${coords.left}px;
+                top: ${coords.bottom + 10}px;
+              `
+              // Add Tailwind CSS classes to ensure styles are available
+              popup.className = 'slash-command-popup'
+              document.body.appendChild(popup)
+              
+              // Create React root and render the component
+              root = createRoot(popup)
+              
+              console.log('Rendering SlashCommand with items:', props.items)
+              
+              root.render(
+                <SlashCommand
+                  items={props.items}
+                  selectedIndex={selectedIndex}
+                  onSelect={(command) => {
+                    console.log('Command selected:', command)
+                    props.command({ editor: props.editor, range: props.range, props: { command } })
+                  }}
+                  query={props.query}
+                />
+              )
+            },
+            onUpdate: (props) => {
+              if (root) {
+                console.log('Slash command onUpdate with items:', props.items)
+                root.render(
+                  <SlashCommand
+                    items={props.items}
+                    selectedIndex={selectedIndex}
+                    onSelect={(command) => {
+                      console.log('Command selected from update:', command)
+                      props.command({ editor: props.editor, range: props.range, props: { command } })
+                    }}
+                    query={props.query}
+                  />
+                )
+              }
+            },
+            onKeyDown: (props) => {
+              if (props.event.key === 'Escape') {
+                props.event.preventDefault()
+                return true
+              }
+              if (props.event.key === 'ArrowDown') {
+                selectedIndex = (selectedIndex + 1) % (props as any).items.length
+                if (root) {
+                  root.render(
+                    <SlashCommand
+                      items={(props as any).items}
+                      selectedIndex={selectedIndex}
+                      onSelect={(command) => {
+                        (props as any).command({ editor: (props as any).editor, range: (props as any).range, props: { command } })
+                      }}
+                      query={(props as any).query}
+                    />
+                  )
+                }
+                return true
+              }
+              if (props.event.key === 'ArrowUp') {
+                selectedIndex = selectedIndex === 0 
+                  ? (props as any).items.length - 1 
+                  : selectedIndex - 1
+                if (root) {
+                  root.render(
+                    <SlashCommand
+                      items={(props as any).items}
+                      selectedIndex={selectedIndex}
+                      onSelect={(command) => {
+                        (props as any).command({ editor: (props as any).editor, range: (props as any).range, props: { command } })
+                      }}
+                      query={(props as any).query}
+                    />
+                  )
+                }
+                return true
+              }
+              if (props.event.key === 'Enter') {
+                const item = (props as any).items[selectedIndex]
+                if (item) {
+                  (props as any).command({ editor: (props as any).editor, range: (props as any).range, props: { command: item.command } })
+                }
+                return true
+              }
+              return false
+            },
+            onExit: () => {
+              if (root) {
+                root.unmount()
+              }
+              if (popup && popup.parentNode) {
+                popup.parentNode.removeChild(popup)
+              }
+            },
+          }
+        },
+      }),
+    ]
+  },
+})
+
 
 
 const Editor = () => {
   const { activeView, views, fileContents, setFileContents, markFileAsDirty } = useStore();
   const currentViewRef = useRef<string | null>(null);
-  const [showSlashMenu, setShowSlashMenu] = useState(false);
-  const [slashPosition, setSlashPosition] = useState({ x: 0, y: 0 });
-  const [slashQuery, setSlashQuery] = useState('');
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const slashMenuRef = useRef<HTMLDivElement>(null);
 
   const currentView = views.find(view => view.title === activeView);
-
-  // Slash command definitions
-  const slashCommands = [
-    { key: 'heading', label: 'Heading', desc: 'Add a main heading', icon: 'H', color: 'bg-blue-500' },
-    { key: 'subheading', label: 'Subheading', desc: 'Add a subheading', icon: 'H2', color: 'bg-green-500' },
-    { key: 'bullet', label: 'Bullet List', desc: 'Add a bullet point', icon: '•', color: 'bg-purple-500' },
-    { key: 'code', label: 'Code Block', desc: 'Add a code block', icon: '</>', color: 'bg-orange-500' },
-    { key: 'monaco', label: 'Monaco Editor', desc: 'Add a Monaco code editor', icon: '⚡', color: 'bg-red-500' }
-  ];
-
-  // Filter commands based on query
-  const filteredCommands = slashQuery 
-    ? slashCommands.filter(cmd => 
-        cmd.label.toLowerCase().includes(slashQuery.toLowerCase()) ||
-        cmd.desc.toLowerCase().includes(slashQuery.toLowerCase())
-      )
-    : slashCommands;
 
   // Get language from file extension
   const getLanguageFromFile = (filename: string): string => {
@@ -585,6 +725,7 @@ const Editor = () => {
         },
       }),
       MonacoBlock,
+      SlashCommands,
       Placeholder.configure({
         placeholder: 'Type / to see commands...',
       }),
@@ -693,163 +834,6 @@ const Editor = () => {
     configureMonacoForTestFiles();
   }, []);
 
-  // Enhanced slash command detection
-  useEffect(() => {
-    if (!editor) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (showSlashMenu) {
-        // Handle navigation when menu is open
-        if (event.key === 'ArrowDown') {
-          event.preventDefault();
-          event.stopPropagation();
-          setSelectedIndex((prev) => (prev + 1) % filteredCommands.length);
-          return;
-        }
-        if (event.key === 'ArrowUp') {
-          event.preventDefault();
-          event.stopPropagation();
-          setSelectedIndex((prev) => prev === 0 ? filteredCommands.length - 1 : prev - 1);
-          return;
-        }
-        if (event.key === 'Enter') {
-          event.preventDefault();
-          event.stopPropagation();
-          if (filteredCommands[selectedIndex]) {
-            handleSlashCommand(filteredCommands[selectedIndex].key);
-          }
-          return;
-        }
-        if (event.key === 'Escape') {
-          event.preventDefault();
-          event.stopPropagation();
-          setShowSlashMenu(false);
-          setSlashQuery('');
-          setSelectedIndex(0);
-          return;
-        }
-        if (event.key === 'Backspace' && slashQuery === '') {
-          event.preventDefault();
-          event.stopPropagation();
-          setShowSlashMenu(false);
-          setSlashQuery('');
-          setSelectedIndex(0);
-          return;
-        }
-        // Handle typing to filter commands
-        if (event.key.length === 1 && event.key !== '/') {
-          event.preventDefault();
-          event.stopPropagation();
-          setSlashQuery(prev => prev + event.key);
-          setSelectedIndex(0);
-          return;
-        }
-      } else {
-        // Handle slash key to open menu
-        if (event.key === '/') {
-          const { view } = editor;
-          const { from } = view.state.selection;
-          
-          // Check if we're at the beginning of a line
-          const $from = view.state.doc.resolve(from);
-          const isAtLineStart = $from.parentOffset === 0;
-          
-          // Also check if we're at the very beginning of the document
-          const isAtDocumentStart = from === 0;
-          
-          // Only show menu if at line start or document start
-          if (isAtLineStart || isAtDocumentStart) {
-            console.log('Slash detected at line start!');
-            const coords = view.coordsAtPos(from);
-            
-            if (coords) {
-              // Get the main content area container
-              const mainContentArea = editor.view.dom.closest('.flex-1');
-              const containerRect = mainContentArea?.getBoundingClientRect();
-              
-              if (containerRect) {
-                // Calculate position relative to the main content area
-                const relativeX = coords.left - containerRect.left;
-                const relativeY = coords.bottom - containerRect.top;
-                
-                console.log('Setting slash position:', { relativeX, relativeY });
-                setSlashPosition({ x: relativeX, y: relativeY });
-                setShowSlashMenu(true);
-                setSlashQuery('');
-                setSelectedIndex(0);
-              } else {
-                // Fallback to absolute positioning
-                setSlashPosition({ x: coords.left, y: coords.bottom });
-                setShowSlashMenu(true);
-                setSlashQuery('');
-                setSelectedIndex(0);
-              }
-            }
-          } else {
-            console.log('Slash detected but not at line start, ignoring');
-          }
-        }
-      }
-    };
-
-    const handleClickOutside = (event: MouseEvent) => {
-      if (showSlashMenu && slashMenuRef.current && !slashMenuRef.current.contains(event.target as Element)) {
-        setShowSlashMenu(false);
-        setSlashQuery('');
-        setSelectedIndex(0);
-      }
-    };
-
-    const editorElement = editor.view.dom;
-    editorElement.addEventListener('keydown', handleKeyDown);
-    document.addEventListener('click', handleClickOutside);
-    
-    return () => {
-      editorElement.removeEventListener('keydown', handleKeyDown);
-      document.removeEventListener('click', handleClickOutside);
-    };
-  }, [editor, showSlashMenu, slashQuery, filteredCommands, selectedIndex]);
-
-  // Handle slash command selection
-  const handleSlashCommand = (command: string) => {
-    if (!editor) return;
-
-    console.log('Executing command:', command);
-    setShowSlashMenu(false);
-    setSlashQuery('');
-    setSelectedIndex(0);
-
-    switch (command) {
-      case 'heading':
-        editor.chain().focus().toggleHeading({ level: 1 }).run();
-        break;
-      case 'subheading':
-        editor.chain().focus().toggleHeading({ level: 2 }).run();
-        break;
-      case 'bullet':
-        editor.chain().focus().toggleBulletList().run();
-        break;
-      case 'code':
-        editor.chain().focus().toggleCodeBlock().run();
-        break;
-      case 'monaco':
-        if (currentView?.files.length) {
-          const file = currentView.files[0];
-          
-          // Insert Monaco block node
-          editor.chain().focus().insertContent({
-            type: 'monacoBlock',
-            attrs: {
-              file: file,
-              language: getLanguageFromFile(file),
-              title: `${file} Editor`,
-            },
-          }).run();
-        }
-        break;
-    }
-  };
-
   if (!activeView || !currentView) {
     return (
       <div className="p-5">
@@ -870,90 +854,7 @@ const Editor = () => {
           </div>
         </div>
 
-        {/* Enhanced slash command menu */}
-        {showSlashMenu && (
-          <div
-            ref={slashMenuRef}
-            className="absolute bg-white border-2 border-gray-300 rounded-xl shadow-2xl z-50 min-w-[280px] max-h-[400px] overflow-hidden slash-menu-animate"
-                    style={{
-            left: slashPosition.x,
-            top: slashPosition.y,
-            backgroundColor: 'white',
-          }}
-          >
-          {/* Header */}
-          <div className="px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-gray-100">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center text-white font-bold text-sm">
-                /
-              </div>
-                              <div>
-                  <div className="font-semibold text-gray-900 text-sm">Commands</div>
-                  <div className="text-xs text-gray-500">
-                    {slashQuery ? `Filtering: "${slashQuery}"` : 'Type to filter commands'}
-                  </div>
-                  {slashQuery && (
-                    <div className="text-xs text-blue-600 font-mono mt-1">
-                      /{slashQuery}
-                    </div>
-                  )}
-                </div>
-            </div>
-          </div>
-
-          {/* Command list */}
-          <div className="max-h-[320px] overflow-y-auto">
-            {filteredCommands.length > 0 ? (
-              filteredCommands.map((cmd, index) => (
-                <div
-                  key={cmd.key}
-                  onClick={() => handleSlashCommand(cmd.key)}
-                  className={`
-                    px-4 py-3 cursor-pointer transition-all duration-150 border-l-4
-                    ${index === selectedIndex 
-                      ? 'bg-blue-50 border-blue-500 shadow-sm' 
-                      : 'border-transparent hover:bg-gray-50 hover:border-gray-200'
-                    }
-                  `}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`w-8 h-8 ${cmd.color} rounded-lg flex items-center justify-center text-white font-bold text-sm`}>
-                      {cmd.icon}
-                    </div>
-                    <div className="flex-1">
-                      <div className="font-semibold text-gray-900 text-sm">{cmd.label}</div>
-                      <div className="text-xs text-gray-500 mt-0.5">{cmd.desc}</div>
-                    </div>
-                    {index === selectedIndex && (
-                      <div className="text-blue-500">
-                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="px-4 py-8 text-center">
-                <div className="text-gray-400 text-sm">No commands found</div>
-                <div className="text-xs text-gray-300 mt-1">Try a different search term</div>
-              </div>
-            )}
-          </div>
-
-          {/* Footer */}
-          <div className="px-4 py-2 border-t border-gray-100 bg-gray-50">
-            <div className="flex items-center justify-between text-xs text-gray-500">
-              <div className="flex items-center gap-4">
-                <span>↑↓ Navigate</span>
-                <span>Enter Select</span>
-              </div>
-              <span>Esc Close</span>
-            </div>
-          </div>
-        </div>
-        )}
+        
       </div>
     </div>
   );
