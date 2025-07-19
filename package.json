@@ -57,6 +57,7 @@
     "@tiptap/pm": "^3.0.7",
     "@tiptap/react": "^3.0.7",
     "@tiptap/starter-kit": "^3.0.7",
+    "@tiptap/suggestion": "^3.0.7",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.7.0",
