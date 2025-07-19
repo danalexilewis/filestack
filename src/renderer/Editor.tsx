@@ -453,40 +453,6 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
             Loading file content...
           </div>
         )}
-        {/* Permanent scroll event handler overlay */}
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: isSelected ? 'transparent' : 'rgba(0,0,0,0.05)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: '#666',
-          fontSize: '14px',
-          pointerEvents: isSelected ? 'none' : 'auto',
-          opacity: isSelected ? 0 : 0.7,
-          transition: 'opacity 0.2s ease, background-color 0.2s ease',
-          zIndex: 10
-        }}
-        onWheel={(e) => {
-          // Always allow scroll events to bubble up to parent
-          e.stopPropagation();
-          const newEvent = new WheelEvent('wheel', {
-            deltaX: e.deltaX,
-            deltaY: e.deltaY,
-            deltaZ: e.deltaZ,
-            deltaMode: e.deltaMode,
-            bubbles: true,
-            cancelable: true,
-          });
-          e.currentTarget.parentElement?.dispatchEvent(newEvent);
-        }}
-        >
-          {!isSelected && 'Click to edit'}
-        </div>
       </div>
     </NodeViewWrapper>
   );
