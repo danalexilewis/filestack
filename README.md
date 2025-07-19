@@ -1,6 +1,15 @@
 # Filestack - Monaco Editor Integration
 
-A modern Electron application that integrates Monaco editor with TipTap rich text editor, providing a powerful code editing experience within a document-based interface.
+Filestack is a simple idea, its a view system that allows you to create documents with code blocks that are editable instances of files in the codebase. This is useful when say you want to look at a front end component, your query code in your data access layer, maybe the api contract or domain model and then the backend corresponding request. Filestack allows these different files to be recombined as a virtual functional layer. It also solves the problem of where to put domain documentation, just put it next to the code.
+
+This project was almost entirely inspired by Org Mode in emacs!
+
+Note from Dan:
+
+Filestack was an expirement in UX and also an experiment in how far and quickly I could direct cursor to build out a functioning Proof of Concept. 
+To get to the point I open sourced this repo it took about 10 hours all together. From ideation to coding and manual bebugging.
+
+This was partly also done so I could convince a friend Sonny to play with the idea as well 😈
 
 ## 🚀 Features
 
