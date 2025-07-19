@@ -66,8 +66,15 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
   };
 
   const handleMonacoBlur = () => {
-    // Don't immediately deselect - let TipTap handle selection state
-    // This prevents flickering when clicking between Monaco and other content
+    // When Monaco loses focus, ensure TipTap selection is cleared
+    if (getPos && editor && isSelected) {
+      // Use a small delay to allow for proper focus handling
+      setTimeout(() => {
+        if (editor && !editorRef.current?.hasWidgetFocus()) {
+          editor.commands.blur();
+        }
+      }, 10);
+    }
   };
 
   // Handle when TipTap selection changes to sync Monaco focus
@@ -122,6 +129,13 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
             console.log(`Updating model content for ${file}`);
             model.setValue(fileContents[file] || '');
           }
+          
+          // Check if the model is already attached to another editor
+          const attachedEditors = monaco.editor.getEditors().filter(editor => editor.getModel() === model);
+          if (attachedEditors.length > 0) {
+            console.log(`Model for ${file} is already attached to ${attachedEditors.length} editor(s)`);
+            // We can still reuse the model, Monaco handles multiple editors on the same model
+          }
         } else {
           console.log(`Creating new model for ${file}`);
           // Create Monaco editor with unique model
@@ -149,6 +163,24 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
           lineDecorationsWidth: 10,
           lineNumbersMinChars: 3,
         });
+
+        // Ensure the editor is properly configured for editing
+        console.log(`Editor created with readOnly: ${!isSelected} for ${file}`);
+        
+        // Set initial read-only state
+        monacoEditor.updateOptions({ readOnly: !isSelected });
+        
+        if (isSelected) {
+          // Force focus and ensure editing is enabled
+          setTimeout(() => {
+            if (monacoEditor && isSelected) {
+              monacoEditor.focus();
+              monacoEditor.updateOptions({ readOnly: false });
+              // Ensure cursor is visible
+              monacoEditor.setPosition(monacoEditor.getPosition());
+            }
+          }, 50);
+        }
 
         console.log('Monaco editor created successfully for:', file, 'readOnly:', !isSelected, 'with content length:', fileContents[file]?.length || 0);
 
@@ -202,7 +234,7 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
         editorRef.current = null;
       }
     };
-  }, [file, language, fileContents[file]]); // Recreate when file, language, or file contents change
+  }, [file, language, fileContents[file], isSelected]); // Recreate when file, language, file contents, or selection changes
 
   // Debug effect to track editor recreation
   useEffect(() => {
@@ -227,13 +259,8 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
     });
   }, [fileContents[file], file]);
 
-  // Update readOnly state when selection changes
-  useEffect(() => {
-    if (editorRef.current) {
-      console.log(`Setting readOnly to ${!isSelected} for ${file}`);
-      editorRef.current.updateOptions({ readOnly: !isSelected });
-    }
-  }, [isSelected, file]);
+  // Note: readOnly state is now handled in the main editor creation effect
+  // since we recreate the editor when selection changes
 
   // Cleanup effect to dispose editor when component unmounts or file changes
   useEffect(() => {
