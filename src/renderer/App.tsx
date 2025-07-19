@@ -24,6 +24,21 @@ const App: React.FC = () => {
       console.log('All views:', JSON.stringify(loadedViews, null, 2));
       setViews(loadedViews);
       
+      // Load all files from all views at once
+      const allFiles = loadedViews.flatMap(view => view.files);
+      const uniqueFiles = [...new Set(allFiles)];
+      console.log('Loading all files from all views:', uniqueFiles);
+      
+      window.electron.getWorkspaceFileContents(uniqueFiles).then((contents) => {
+        console.log('All file contents loaded:', Object.keys(contents));
+        Object.entries(contents).forEach(([file, content]) => {
+          console.log(`Setting content for ${file}, length: ${content.length}`);
+          setFileContents(file, content);
+        });
+      }).catch((error) => {
+        console.error('Error loading all file contents:', error);
+      });
+      
       // Set the first view as active if no view is currently active
       if (loadedViews.length > 0 && !activeView) {
         console.log('Setting first view as active:', loadedViews[0].title);
@@ -38,26 +53,27 @@ const App: React.FC = () => {
     window.electron.onConfigError((errorMessage: string) => {
       console.error('Config error:', errorMessage);
     });
-  }, [setViews, setWorkspacePath, setActiveView, activeView]);
+  }, [setViews, setWorkspacePath, setActiveView, activeView, setFileContents]);
 
-  // Load file contents when active view changes
+  // Log when active view changes (files should already be loaded)
   useEffect(() => {
-    if (activeView && workspacePath) {
+    if (activeView) {
       const currentView = views.find(view => view.title === activeView);
       if (currentView) {
-        console.log(`Loading file contents for view: ${activeView}`, currentView.files);
-        window.electron.getWorkspaceFileContents(currentView.files).then((contents) => {
-          console.log('File contents loaded:', Object.keys(contents));
-          Object.entries(contents).forEach(([file, content]) => {
-            console.log(`Setting content for ${file}, length: ${content.length}`);
-            setFileContents(file, content);
-          });
-        }).catch((error) => {
-          console.error('Error loading file contents:', error);
-        });
+        console.log(`Switched to view: ${activeView}`);
+        console.log(`Files in this view:`, currentView.files);
+        console.log(`Files loaded in store:`, Object.keys(fileContents));
+        
+        // Check if all files for this view are loaded
+        const missingFiles = currentView.files.filter(file => fileContents[file] === undefined);
+        if (missingFiles.length > 0) {
+          console.warn(`Missing files for view ${activeView}:`, missingFiles);
+        } else {
+          console.log(`All files for view ${activeView} are loaded`);
+        }
       }
     }
-  }, [activeView, workspacePath, views, setFileContents]);
+  }, [activeView, views, fileContents]);
 
   const handleSave = () => {
     const filesToSave: Record<string, string> = {};

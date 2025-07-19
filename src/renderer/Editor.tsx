@@ -12,6 +12,7 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
   const { fileContents, setFileContents, markFileAsDirty } = useStore();
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const isInitializingRef = useRef(false);
   
   const file = node.attrs.file;
   const language = node.attrs.language;
@@ -99,6 +100,8 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
 
     console.log('Creating Monaco editor for:', file, 'selected:', isSelected, 'content length:', fileContents[file]?.length || 0);
     
+    isInitializingRef.current = true;
+    
     // Use requestAnimationFrame to ensure DOM is ready
     const frameId = requestAnimationFrame(() => {
       if (!containerRef.current) {
@@ -107,12 +110,27 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
       }
       
       try {
-        // Create Monaco editor with unique model
-        const model = monaco.editor.createModel(
-          fileContents[file] || '',
-          language,
-          monaco.Uri.parse(`inmemory://${file}`)
-        );
+        const modelUri = monaco.Uri.parse(`inmemory://${file}`);
+        
+        // Check if model already exists and reuse it, or create a new one
+        let model = monaco.editor.getModel(modelUri);
+        if (model) {
+          console.log(`Reusing existing model for ${file}`);
+          // Update the model content if it's different
+          const currentValue = model.getValue();
+          if (currentValue !== fileContents[file]) {
+            console.log(`Updating model content for ${file}`);
+            model.setValue(fileContents[file] || '');
+          }
+        } else {
+          console.log(`Creating new model for ${file}`);
+          // Create Monaco editor with unique model
+          model = monaco.editor.createModel(
+            fileContents[file] || '',
+            language,
+            modelUri
+          );
+        }
         
         const monacoEditor = monaco.editor.create(containerRef.current, {
           model: model,
@@ -136,7 +154,7 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
 
         // Track changes and update store
         const changeDisposable = monacoEditor.onDidChangeModelContent(() => {
-          if (isSelected) {
+          if (isSelected && !isInitializingRef.current) {
             const newValue = monacoEditor.getValue();
             console.log(`Content changed for ${file}:`, newValue.substring(0, 100) + '...');
             setFileContents(file, newValue);
@@ -155,6 +173,12 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
         });
 
         editorRef.current = monacoEditor;
+        
+        // Mark initialization as complete after a short delay
+        setTimeout(() => {
+          isInitializingRef.current = false;
+          console.log(`Editor initialization complete for ${file}`);
+        }, 100);
 
         return () => {
           console.log(`Disposing Monaco editor for ${file}`);
@@ -162,7 +186,8 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
           focusDisposable.dispose();
           blurDisposable.dispose();
           monacoEditor.dispose();
-          model.dispose();
+          // Don't dispose the model as it might be reused by other editors
+          // The model will be cleaned up when the app closes or when explicitly disposed
         };
       } catch (error) {
         console.error('Error creating Monaco editor for:', file, error);
@@ -177,37 +202,28 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
         editorRef.current = null;
       }
     };
-  }, [file, language, fileContents, setFileContents, markFileAsDirty]); // Removed isSelected dependency
+  }, [file, language, fileContents[file]]); // Recreate when file, language, or file contents change
 
-  // Update editor content when fileContents changes
+  // Debug effect to track editor recreation
   useEffect(() => {
-    if (editorRef.current && file && fileContents[file] !== undefined) {
-      const currentValue = editorRef.current.getValue();
-      const newValue = fileContents[file];
-      
-      console.log(`File contents for ${file}:`, newValue ? newValue.substring(0, 100) + '...' : 'empty');
-      
-      // Only update if the content is actually different
-      if (currentValue !== newValue) {
-        console.log(`Updating Monaco editor content for ${file}:`, newValue.substring(0, 100) + '...');
-        editorRef.current.setValue(newValue);
-      }
-    } else {
-      console.log(`Cannot update editor for ${file}:`, {
-        hasEditor: !!editorRef.current,
-        hasFile: !!file,
-        hasContent: fileContents[file] !== undefined,
-        content: fileContents[file]
-      });
-    }
-  }, [fileContents, file]);
+    console.log(`Editor recreation triggered for ${file}:`, {
+      file,
+      language,
+      hasContent: fileContents[file] !== undefined,
+      contentLength: fileContents[file]?.length || 0
+    });
+  }, [file, language, fileContents[file]]);
+
+  // No separate content update effect needed - editor is recreated when fileContents change
 
   // Debug effect to log file contents changes
   useEffect(() => {
     console.log(`File contents changed for ${file}:`, {
       hasContent: fileContents[file] !== undefined,
       contentLength: fileContents[file]?.length || 0,
-      contentPreview: fileContents[file]?.substring(0, 50) || 'undefined'
+      contentPreview: fileContents[file]?.substring(0, 50) || 'undefined',
+      hasEditor: !!editorRef.current,
+      isInitializing: isInitializingRef.current
     });
   }, [fileContents[file], file]);
 
@@ -218,6 +234,17 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
       editorRef.current.updateOptions({ readOnly: !isSelected });
     }
   }, [isSelected, file]);
+
+  // Cleanup effect to dispose editor when component unmounts or file changes
+  useEffect(() => {
+    return () => {
+      if (editorRef.current) {
+        console.log(`Component cleanup: disposing Monaco editor for ${file}`);
+        editorRef.current.dispose();
+        editorRef.current = null;
+      }
+    };
+  }, [file]);
 
   if (!file || !language) {
     return <NodeViewWrapper>Invalid Monaco block</NodeViewWrapper>;
