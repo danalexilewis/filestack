@@ -8,7 +8,7 @@ import Placeholder from '@tiptap/extension-placeholder';
 import { Node, mergeAttributes } from '@tiptap/core';
 
 // Simple Monaco Block React Component
-const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node }) => {
+const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, selected, updateAttributes }) => {
   const { fileContents, setFileContents, markFileAsDirty } = useStore();
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -17,63 +17,192 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node }) => {
   const language = node.attrs.language;
   const title = node.attrs.title;
   
+  // Use TipTap's selection state instead of local isEditing
+  const isSelected = selected;
+  
+  const handleSave = () => {
+    if (editorRef.current) {
+      const content = editorRef.current.getValue();
+      setFileContents(file, content);
+      markFileAsDirty(file);
+      console.log('Saved file:', file);
+    }
+  };
+
+  const handleClick = () => {
+    // Focus the TipTap node when clicked
+    if (getPos && editor) {
+      editor.commands.focus();
+      editor.commands.setNodeSelection(getPos());
+    }
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Enter' && !isSelected) {
+      event.preventDefault();
+      if (getPos && editor) {
+        editor.commands.focus();
+        editor.commands.setNodeSelection(getPos());
+      }
+    } else if (event.key === 'Escape' && isSelected) {
+      event.preventDefault();
+      if (editor) {
+        editor.commands.blur();
+      }
+    }
+  };
+
+  // Handle Monaco editor focus/blur to sync with TipTap selection
+  const handleMonacoFocus = () => {
+    if (getPos && editor && !isSelected) {
+      // Use a small delay to ensure Monaco is fully focused before setting TipTap selection
+      setTimeout(() => {
+        if (editorRef.current) {
+          editor.commands.setNodeSelection(getPos());
+        }
+      }, 10);
+    }
+  };
+
+  const handleMonacoBlur = () => {
+    // Don't immediately deselect - let TipTap handle selection state
+    // This prevents flickering when clicking between Monaco and other content
+  };
+
+  // Handle when TipTap selection changes to sync Monaco focus
   useEffect(() => {
-    if (!containerRef.current || !file || !language) return;
+    if (editorRef.current && isSelected) {
+      // When the block becomes selected, focus the Monaco editor
+      setTimeout(() => {
+        if (editorRef.current && isSelected) {
+          editorRef.current.focus();
+        }
+      }, 50);
+    }
+  }, [isSelected]);
 
-    console.log('Creating Monaco editor for:', file);
+  useEffect(() => {
+    if (!containerRef.current || !file || !language) {
+      console.log('Cannot create Monaco editor:', { 
+        hasContainer: !!containerRef.current, 
+        hasFile: !!file, 
+        hasLanguage: !!language 
+      });
+      return;
+    }
+
+    console.log('Creating Monaco editor for:', file, 'selected:', isSelected);
     
-    // Use setTimeout to avoid React lifecycle issues
-    const timeoutId = setTimeout(() => {
-      if (!containerRef.current) return;
+    // Use requestAnimationFrame to ensure DOM is ready
+    const frameId = requestAnimationFrame(() => {
+      if (!containerRef.current) {
+        console.log('Container not ready, retrying...');
+        return;
+      }
       
-      // Create Monaco editor with unique model
-      const model = monaco.editor.createModel(
-        fileContents[file] || '',
-        language,
-        monaco.Uri.parse(`inmemory://${file}`)
-      );
-      
-      const monacoEditor = monaco.editor.create(containerRef.current, {
-        model: model,
-        theme: 'vs-dark',
-        minimap: { enabled: false },
-        scrollBeyondLastLine: false,
-        automaticLayout: true,
-        scrollbar: {
-          vertical: 'hidden',
-        },
-        overviewRulerLanes: 0,
-        readOnly: false,
-        wordWrap: 'on',
-        lineNumbers: 'on',
-        folding: false,
-        lineDecorationsWidth: 10,
-        lineNumbersMinChars: 3,
-      });
+      try {
+        // Create Monaco editor with unique model
+        const model = monaco.editor.createModel(
+          fileContents[file] || '',
+          language,
+          monaco.Uri.parse(`inmemory://${file}`)
+        );
+        
+        const monacoEditor = monaco.editor.create(containerRef.current, {
+          model: model,
+          theme: 'vs-dark',
+          minimap: { enabled: false },
+          scrollBeyondLastLine: false,
+          automaticLayout: true,
+          scrollbar: {
+            vertical: 'hidden',
+          },
+          overviewRulerLanes: 0,
+          readOnly: !isSelected,
+          wordWrap: 'on',
+          lineNumbers: 'on',
+          folding: false,
+          lineDecorationsWidth: 10,
+          lineNumbersMinChars: 3,
+        });
 
-      // Track changes and update store
-      const changeDisposable = monacoEditor.onDidChangeModelContent(() => {
-        const newValue = monacoEditor.getValue();
-        setFileContents(file, newValue);
-        markFileAsDirty(file);
-      });
+        console.log('Monaco editor created successfully for:', file, 'readOnly:', !isSelected);
 
-      editorRef.current = monacoEditor;
+        // Track changes and update store
+        const changeDisposable = monacoEditor.onDidChangeModelContent(() => {
+          if (isSelected) {
+            const newValue = monacoEditor.getValue();
+            console.log(`Content changed for ${file}:`, newValue.substring(0, 100) + '...');
+            setFileContents(file, newValue);
+            markFileAsDirty(file);
+          }
+        });
 
-      return () => {
-        changeDisposable.dispose();
-        monacoEditor.dispose();
-        model.dispose();
-      };
-    }, 0);
+        // Handle Monaco focus/blur events
+        const focusDisposable = monacoEditor.onDidFocusEditorWidget(() => {
+          console.log(`Monaco editor focused for ${file}`);
+          handleMonacoFocus();
+        });
+        const blurDisposable = monacoEditor.onDidBlurEditorWidget(() => {
+          console.log(`Monaco editor blurred for ${file}`);
+          handleMonacoBlur();
+        });
+
+        editorRef.current = monacoEditor;
+
+        return () => {
+          console.log(`Disposing Monaco editor for ${file}`);
+          changeDisposable.dispose();
+          focusDisposable.dispose();
+          blurDisposable.dispose();
+          monacoEditor.dispose();
+          model.dispose();
+        };
+      } catch (error) {
+        console.error('Error creating Monaco editor for:', file, error);
+      }
+    });
 
     return () => {
-      clearTimeout(timeoutId);
+      cancelAnimationFrame(frameId);
       if (editorRef.current) {
+        console.log(`Cleaning up Monaco editor for ${file}`);
         editorRef.current.dispose();
+        editorRef.current = null;
       }
     };
-  }, [file, language, fileContents, setFileContents, markFileAsDirty]);
+  }, [file, language, fileContents, setFileContents, markFileAsDirty]); // Removed isSelected dependency
+
+  // Update editor content when fileContents changes
+  useEffect(() => {
+    if (editorRef.current && file && fileContents[file] !== undefined) {
+      const currentValue = editorRef.current.getValue();
+      const newValue = fileContents[file];
+      
+      console.log(`File contents for ${file}:`, newValue ? newValue.substring(0, 100) + '...' : 'empty');
+      
+      // Only update if the content is actually different
+      if (currentValue !== newValue) {
+        console.log(`Updating Monaco editor content for ${file}:`, newValue.substring(0, 100) + '...');
+        editorRef.current.setValue(newValue);
+      }
+    } else {
+      console.log(`Cannot update editor for ${file}:`, {
+        hasEditor: !!editorRef.current,
+        hasFile: !!file,
+        hasContent: fileContents[file] !== undefined,
+        content: fileContents[file]
+      });
+    }
+  }, [fileContents, file]);
+
+  // Update readOnly state when selection changes
+  useEffect(() => {
+    if (editorRef.current) {
+      console.log(`Setting readOnly to ${!isSelected} for ${file}`);
+      editorRef.current.updateOptions({ readOnly: !isSelected });
+    }
+  }, [isSelected, file]);
 
   if (!file || !language) {
     return <NodeViewWrapper>Invalid Monaco block</NodeViewWrapper>;
@@ -83,25 +212,66 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node }) => {
 
   return (
     <NodeViewWrapper>
-      <div style={{
-        minHeight: '200px',
-        width: '100%',
-        border: '2px solid #007acc',
-        marginTop: '10px',
-        marginBottom: '10px',
-        borderRadius: '4px',
-        overflow: 'hidden',
-        background: '#1e1e1e'
-      }}>
+      <div 
+        style={{
+          minHeight: '200px',
+          width: '100%',
+          border: isSelected ? '2px solid #007acc' : '2px solid #ccc',
+          marginTop: '10px',
+          marginBottom: '10px',
+          borderRadius: '4px',
+          overflow: 'hidden',
+          background: '#1e1e1e',
+          cursor: isSelected ? 'text' : 'pointer',
+          transition: 'border-color 0.2s ease',
+          position: 'relative'
+        }}
+        onClick={handleClick}
+        onKeyDown={handleKeyDown}
+        tabIndex={0}
+        role="button"
+        aria-label={`Click to edit ${displayTitle}`}
+      >
         <div style={{
           padding: '8px 12px',
-          background: '#f5f5f5',
+          background: isSelected ? '#e3f2fd' : '#f5f5f5',
           borderBottom: '1px solid #ccc',
           fontSize: '14px',
           fontWeight: 'bold',
-          color: '#333'
+          color: '#333',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          transition: 'background-color 0.2s ease'
         }}>
-          {displayTitle}
+          <span>{displayTitle}</span>
+          {isSelected && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '12px', color: '#007acc', fontWeight: 'normal' }}>
+                Editing
+              </span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSave();
+                }}
+                style={{
+                  background: '#007acc',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  padding: '4px 8px',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = '#005a9e'}
+                onMouseLeave={(e) => e.currentTarget.style.background = '#007acc'}
+              >
+                Save
+              </button>
+            </div>
+          )}
         </div>
         <div 
           ref={containerRef}
@@ -110,6 +280,26 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node }) => {
             width: '100%'
           }}
         />
+        {!isSelected && (
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.05)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#666',
+            fontSize: '14px',
+            pointerEvents: 'none',
+            opacity: 0.7,
+            transition: 'opacity 0.2s ease'
+          }}>
+            Click to edit
+          </div>
+        )}
       </div>
     </NodeViewWrapper>
   );
@@ -120,6 +310,8 @@ const MonacoBlock = Node.create({
   name: 'monacoBlock',
   group: 'block',
   atom: true,
+  selectable: true,
+  draggable: true,
   
   addAttributes() {
     return {
