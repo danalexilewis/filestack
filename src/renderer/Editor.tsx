@@ -16,6 +16,7 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isInitializingRef = useRef(false);
+  const isUpdatingFromEditorRef = useRef(false);
   
   const file = node.attrs.file;
   const language = node.attrs.language;
@@ -34,10 +35,23 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
   };
 
   const handleClick = () => {
-    // Focus the TipTap node when clicked
-      };
+    console.log(`handleClick called for ${file}, isSelected: ${isSelected}`);
+    // Only set TipTap selection if we're not already selected to prevent cursor reset
+    if (!isSelected && getPos && editor) {
+      console.log(`Setting TipTap selection from click for ${file}`);
+      editor.commands.setNodeSelection(getPos());
+    } else {
+      console.log(`Click ignored - already selected or missing editor/getPos for ${file}`);
+    }
+  };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    // If Monaco is focused, don't let TipTap handle keyboard events
+    if (editorRef.current && editorRef.current.hasWidgetFocus()) {
+      console.log(`Monaco is focused, preventing TipTap keyboard handling for ${file}`);
+      return;
+    }
+    
     if (event.key === 'Enter' && !isSelected) {
       event.preventDefault();
       if (getPos && editor) {
@@ -54,10 +68,12 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
 
   // Handle Monaco editor focus/blur to sync with TipTap selection
   const handleMonacoFocus = () => {
+    console.log(`handleMonacoFocus called for ${file}, isSelected: ${isSelected}`);
     if (getPos && editor && !isSelected) {
-      // Use a small delay to ensure Monaco is fully focused before setting TipTap selection
+      // Only set TipTap selection if Monaco is actually focused and we're not already selected
       setTimeout(() => {
-        if (editorRef.current) {
+        if (editorRef.current && editorRef.current.hasWidgetFocus() && !isSelected) {
+          console.log(`Setting TipTap selection for ${file}`);
           editor.commands.setNodeSelection(getPos());
         }
       }, 10);
@@ -76,15 +92,20 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
     }
   };
 
-  // Handle when TipTap selection changes to sync Monaco focus
+  // Handle when TipTap selection changes to sync Monaco focus and read-only state
   useEffect(() => {
-    if (editorRef.current && isSelected) {
-      // When the block becomes selected, focus the Monaco editor
-      setTimeout(() => {
-        if (editorRef.current && isSelected) {
-          editorRef.current.focus();
-        }
-      }, 50);
+    if (editorRef.current) {
+      // Update read-only state without recreating the editor
+      editorRef.current.updateOptions({ readOnly: !isSelected });
+      
+      if (isSelected) {
+        // When the block becomes selected, focus the Monaco editor
+        setTimeout(() => {
+          if (editorRef.current && isSelected) {
+            editorRef.current.focus();
+          }
+        }, 50);
+      }
     }
   }, [isSelected]);
 
@@ -101,6 +122,12 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
     // Wait for file contents to be available
     if (fileContents[file] === undefined) {
       console.log(`Waiting for file contents to load for ${file}`);
+      return;
+    }
+
+    // Don't recreate editor if the change came from this editor
+    if (isUpdatingFromEditorRef.current) {
+      console.log(`Skipping editor recreation for ${file} - change came from editor`);
       return;
     }
 
@@ -156,7 +183,7 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
             horizontal: 'hidden',
           },
           overviewRulerLanes: 0,
-          readOnly: !isSelected,
+          readOnly: !isSelected, // Initial read-only state
           wordWrap: 'on',
           lineNumbers: 'on',
           folding: false,
@@ -246,9 +273,7 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
           setTimeout(() => {
             if (monacoEditor && isSelected) {
               monacoEditor.focus();
-              monacoEditor.updateOptions({ readOnly: false });
-              // Ensure cursor is visible
-              monacoEditor.setPosition(monacoEditor.getPosition());
+              // Read-only state is handled by the effect above
             }
           }, 50);
         }
@@ -260,19 +285,35 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
           if (isSelected && !isInitializingRef.current) {
             const newValue = monacoEditor.getValue();
             console.log(`Content changed for ${file}:`, newValue.substring(0, 100) + '...');
+            // Set flag to prevent editor recreation
+            isUpdatingFromEditorRef.current = true;
             setFileContents(file, newValue);
             markFileAsDirty(file);
+            // Reset flag after a short delay
+            setTimeout(() => {
+              isUpdatingFromEditorRef.current = false;
+            }, 100);
           }
         });
 
         // Handle Monaco focus/blur events
         const focusDisposable = monacoEditor.onDidFocusEditorWidget(() => {
-          console.log(`Monaco editor focused for ${file}`);
-          handleMonacoFocus();
+          console.log(`Monaco editor focused for ${file}, isSelected: ${isSelected}, cursor position:`, monacoEditor.getPosition());
+          // Skip focus handling entirely when already selected to prevent any interference
+          if (!isSelected) {
+            handleMonacoFocus();
+          } else {
+            console.log(`Monaco focused but already selected, skipping all TipTap interaction for ${file}`);
+          }
         });
         const blurDisposable = monacoEditor.onDidBlurEditorWidget(() => {
           console.log(`Monaco editor blurred for ${file}`);
           handleMonacoBlur();
+        });
+        
+        // Monitor cursor position changes to debug cursor reset issues
+        const cursorPositionDisposable = monacoEditor.onDidChangeCursorPosition((e) => {
+          console.log(`Cursor position changed for ${file}:`, e.position, 'reason:', e.reason);
         });
 
         editorRef.current = monacoEditor;
@@ -288,6 +329,7 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
           changeDisposable.dispose();
           focusDisposable.dispose();
           blurDisposable.dispose();
+          cursorPositionDisposable.dispose();
           contentChangeDisposable.dispose();
           
           // Remove scroll event listeners
@@ -320,7 +362,7 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
         editorRef.current = null;
       }
     };
-  }, [file, language, fileContents[file], isSelected]); // Recreate when file, language, file contents, or selection changes
+  }, [file, language, fileContents[file]]); // Recreate when file, language, or file contents change
 
   // Debug effect to track editor recreation
   useEffect(() => {
