@@ -154,6 +154,7 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
           automaticLayout: true,
           scrollbar: {
             vertical: 'hidden',
+            horizontal: 'hidden',
           },
           overviewRulerLanes: 0,
           readOnly: !isSelected,
@@ -162,6 +163,8 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
           folding: false,
           lineDecorationsWidth: 10,
           lineNumbersMinChars: 3,
+          // Dynamic height settings
+          fixedOverflowWidgets: true,
         });
 
         // Ensure the editor is properly configured for editing
@@ -169,6 +172,28 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
         
         // Set initial read-only state
         monacoEditor.updateOptions({ readOnly: !isSelected });
+        
+        // Function to adjust editor height based on content
+        const adjustEditorHeight = () => {
+          if (containerRef.current && monacoEditor) {
+            const lineCount = monacoEditor.getModel()?.getLineCount() || 1;
+            const lineHeight = monacoEditor.getOption(monaco.editor.EditorOption.lineHeight);
+            const padding = 20; // Account for padding and borders
+            const minHeight = 200;
+            const calculatedHeight = Math.max(minHeight, (lineCount * lineHeight) + padding);
+            
+            containerRef.current.style.height = `${calculatedHeight}px`;
+            monacoEditor.layout();
+          }
+        };
+        
+        // Adjust height initially
+        setTimeout(adjustEditorHeight, 10);
+        
+        // Adjust height when content changes
+        const contentChangeDisposable = monacoEditor.onDidChangeModelContent(() => {
+          adjustEditorHeight();
+        });
         
         if (isSelected) {
           // Force focus and ensure editing is enabled
@@ -217,6 +242,7 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
           changeDisposable.dispose();
           focusDisposable.dispose();
           blurDisposable.dispose();
+          contentChangeDisposable.dispose();
           monacoEditor.dispose();
           // Don't dispose the model as it might be reused by other editors
           // The model will be cleaned up when the app closes or when explicitly disposed
@@ -347,7 +373,8 @@ const MonacoBlockComponent: React.FC<NodeViewProps> = ({ node, editor, getPos, s
           ref={containerRef}
           style={{
             minHeight: '200px',
-            width: '100%'
+            width: '100%',
+            transition: 'height 0.2s ease'
           }}
         />
         {!isContentLoaded && (
